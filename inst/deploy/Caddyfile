@@ -1,0 +1,59 @@
+# LibeRties TLS reverse proxy - Caddy
+# ---------------------------------------------------------------------------
+# Caddy is the simplest option (single binary, automatic HTTPS + cert renewal,
+# works on Windows and Linux). It terminates TLS and forwards to the local
+# LibeRties API, which must be bound to 127.0.0.1 (the default).
+#
+# Setup:
+#   1. Install Caddy (https://caddyserver.com/download).
+#   2. Replace scheduler.example.com with your DNS name (must resolve to this
+#      host for automatic certificates; for internal-only use, see the note on
+#      internal TLS below).
+#   3. Generate a shared secret and set the SAME value in the server config:
+#        LibeRties::ls_config_set(proxy_shared_secret = "<secret>")
+#      and in the header_up line below.
+#   4. Ensure the API config has api_host = "127.0.0.1" (default) and run
+#        LibeRties::ls_run_api()
+#   5. Start Caddy:  caddy run --config ./Caddyfile
+#   6. On clients, add the server with an https:// base_url:
+#        nm_remote_server_add("HPC", "https://scheduler.example.com", "alice",
+#                             token = "lr_...")
+# ---------------------------------------------------------------------------
+
+scheduler.example.com {
+    encode gzip
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        -Server
+    }
+
+    # Large model/data payloads are sent as base64 JSON bodies.
+    request_body {
+        max_size 512MB
+    }
+
+    reverse_proxy 127.0.0.1:8080 {
+        header_up X-Proxy-Secret "REPLACE_WITH_proxy_shared_secret"
+        header_up X-Forwarded-Proto https
+        # Long-running estimations: allow the upstream time to respond.
+        transport http {
+            read_timeout 900s
+            write_timeout 900s
+        }
+    }
+}
+
+# Internal-only / no public DNS: use Caddy's internal CA instead of the block
+# above. Clients must trust the Caddy root CA, or set insecure = TRUE when
+# adding the server (development only).
+#
+# https://scheduler.internal {
+#     tls internal
+#     reverse_proxy 127.0.0.1:8080 {
+#         header_up X-Proxy-Secret "REPLACE_WITH_proxy_shared_secret"
+#         header_up X-Forwarded-Proto https
+#     }
+# }

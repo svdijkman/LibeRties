@@ -1,0 +1,30 @@
+Package: LibeRties
+Title: Task Infrastructure and Execution Service for LibeRation
+Version: 0.4.0
+Authors@R:
+    person("Sven C.", "van Dijkman", email = "svdijkman@users.noreply.github.com", role = c("aut", "cre"))
+Description: LibeRties (Task Infrastructure and Execution Service) provides
+    container-sandboxed remote job scheduling for LibeRation with API token
+    authentication, per-user resource limits, dataset integrity checks (MD5),
+    and an admin Shiny application.
+License: MIT + file LICENSE
+URL: https://github.com/svdijkman/LibeRties
+BugReports: https://github.com/svdijkman/LibeRties/issues
+Encoding: UTF-8
+Imports:
+    jsonlite,
+    plumber,
+    digest,
+    sodium,
+    tools,
+    htmltools
+Suggests:
+    LibeRation (>= 0.4.0),
+    LibeRtAD (>= 0.4.0),
+    callr,
+    pkgload,
+    shiny,
+    DT,
+    testthat (>= 3.0.0),
+    withr
+Config/testthat/edition: 3
