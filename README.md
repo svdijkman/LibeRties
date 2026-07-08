@@ -55,3 +55,25 @@ docker build -f LibeRties/inst/docker/Dockerfile -t liberties-worker:latest .
 Set `launcher = "docker"` in config.
 
 Environment variables use the `LIBERTIES_*` prefix (legacy `LIBERATION_*` names still work).
+
+## Documentation
+
+```r
+?LibeRties
+?ls_run_api
+?ls_user_create
+```
+
+Regenerate manuals from source:
+
+```r
+roxygen2::roxygenise("path/to/LibeRties")
+```
+
+## Vignette
+
+```r
+vignette("getting-started", package = "LibeRties")
+```
+
+Requires **knitr**, **rmarkdown**, and Pandoc.

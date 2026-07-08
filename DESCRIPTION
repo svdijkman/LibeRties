@@ -1,6 +1,6 @@
 Package: LibeRties
 Title: Task Infrastructure and Execution Service for LibeRation
-Version: 0.4.0
+Version: 0.4.1
 Authors@R:
     person("Sven C.", "van Dijkman", email = "svdijkman@users.noreply.github.com", role = c("aut", "cre"))
 Description: LibeRties (Task Infrastructure and Execution Service) provides
@@ -11,6 +11,8 @@ License: MIT + file LICENSE
 URL: https://github.com/svdijkman/LibeRties
 BugReports: https://github.com/svdijkman/LibeRties/issues
 Encoding: UTF-8
+Depends: R (>= 4.1.0)
+Roxygen: list(markdown = TRUE)
 Imports:
     jsonlite,
     plumber,
@@ -26,5 +28,9 @@ Suggests:
     shiny,
     DT,
     testthat (>= 3.0.0),
-    withr
+    withr,
+    knitr,
+    rmarkdown
 Config/testthat/edition: 3
+Config/roxygen2/version: 8.0.0
+VignetteBuilder: knitr
