@@ -1,36 +1,32 @@
 Package: LibeRties
-Title: Task Infrastructure and Execution Service for LibeRation
-Version: 0.4.1
-Authors@R:
-    person("Sven C.", "van Dijkman", email = "svdijkman@users.noreply.github.com", role = c("aut", "cre"))
-Description: LibeRties (Task Infrastructure and Execution Service) provides
-    container-sandboxed remote job scheduling for LibeRation with API token
-    authentication, per-user resource limits, dataset integrity checks (MD5),
-    and an admin Shiny application.
+Type: Package
+Title: Portable Job Execution for LibeR
+Version: 0.6.0
+Authors@R: person("Sven C.", "van Dijkman",
+    email = "svdijkman@users.noreply.github.com", role = c("aut", "cre"))
+Author: Sven C. van Dijkman [aut, cre]
+Maintainer: Sven C. van Dijkman <svdijkman@users.noreply.github.com>
+Description: Executes serialized LibeR simulation and estimation jobs in
+    isolated per-user sandboxes. A persistent cross-platform local queue uses
+    background R worker processes and the same versioned job contract intended
+    for remote Linux servers. Payload checksums, explicit state transitions,
+    metadata locking, safe path components, cancellation, logs, restart
+    recovery, per-tenant quotas, monitored resource limits, and result
+    provenance are built into the contract.
 License: MIT + file LICENSE
-URL: https://github.com/svdijkman/LibeRties
-BugReports: https://github.com/svdijkman/LibeRties/issues
 Encoding: UTF-8
 Depends: R (>= 4.1.0)
-Roxygen: list(markdown = TRUE)
 Imports:
-    jsonlite,
-    plumber,
-    digest,
-    sodium,
-    tools,
-    htmltools
-Suggests:
-    LibeRation (>= 0.4.0),
-    LibeRtAD (>= 0.4.0),
+    R6,
     callr,
-    pkgload,
-    shiny,
-    DT,
-    testthat (>= 3.0.0),
-    withr,
-    knitr,
-    rmarkdown
+    httr2,
+    jsonlite,
+    openssl,
+    plumber,
+    ps,
+    shiny
+Suggests:
+    LibeRation (>= 0.6.0),
+    testthat (>= 3.0.0)
 Config/testthat/edition: 3
 Config/roxygen2/version: 8.0.0
-VignetteBuilder: knitr

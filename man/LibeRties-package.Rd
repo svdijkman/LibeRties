@@ -4,48 +4,9 @@
 \name{LibeRties-package}
 \alias{LibeRties}
 \alias{LibeRties-package}
-\title{LibeRties: Task Infrastructure and Execution Service}
+\title{LibeRties: portable execution for LibeR jobs}
 \description{
-LibeRties schedules \strong{LibeRation} estimation jobs in isolated sandboxes with
-API token authentication, per-user resource limits, dataset MD5 verification,
-and an admin Shiny application.
-}
-\section{Quick start}{
-
-\itemize{
-\item Configure: \code{\link[=ls_config_set]{ls_config_set()}}, \code{\link[=ls_sandbox_root]{ls_sandbox_root()}}
-\item Admin token: \code{\link[=ls_admin_token_set]{ls_admin_token_set()}}
-\item Users: \code{\link[=ls_user_create]{ls_user_create()}}, \code{\link[=ls_user_list]{ls_user_list()}}, \code{\link[=ls_user_issue_token]{ls_user_issue_token()}}
-\item Run services: \code{\link[=ls_run_api]{ls_run_api()}}, \code{\link[=ls_run_admin]{ls_run_admin()}}
-}
-}
-
-\section{LibeRation client}{
-
-Register a remote server in \strong{LibeRation} with \code{nm_remote_server_add()} and
-submit jobs via \code{nm_job_submit(..., server = )}. The LibeRation Shiny GUI
-exposes the same workflow on the Jobs tab.
-}
-
-\section{Security}{
-
-User API tokens are hashed at rest. Optional per-user encryption wraps job
-keys; use \code{\link[=ls_user_issue_token]{ls_user_issue_token()}} with \code{current_token} when rotating tokens.
-Bind the API to localhost or terminate TLS at a reverse proxy (see
-\verb{inst/deploy/}).
-}
-
-\section{Environment variables}{
-
-\itemize{
-\item \code{LIBERTIES_SANDBOX_ROOT} — sandbox directory
-\item \code{LIBERTIES_API_HOST}, \code{LIBERTIES_API_PORT} — API bind address
-\item \code{LIBERATION_ROOT} — dev path to LibeRation for the worker subprocess
-}
-}
-
-\seealso{
-\code{\link[=ls_config]{ls_config()}} for all configuration keys.
+Executes serialized LibeR simulation and estimation jobs in isolated per-user sandboxes. A persistent cross-platform local queue uses background R worker processes and the same versioned job contract intended for remote Linux servers. Payload checksums, explicit state transitions, metadata locking, safe path components, cancellation, logs, restart recovery, per-tenant quotas, monitored resource limits, and result provenance are built into the contract.
 }
 \author{
 \strong{Maintainer}: Sven C. van Dijkman \email{svdijkman@users.noreply.github.com}
@@ -56,3 +17,4 @@ Authors:
 }
 
 }
+\keyword{internal}

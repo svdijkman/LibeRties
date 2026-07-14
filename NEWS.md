@@ -1,15 +1,15 @@
-## LibeRties 0.4.1
+# LibeRties 0.6.0
 
-* First full manual set (`roxygen2`), package overview, getting-started vignette,
-  and README documentation section. Exported [ls_admin_token_set()] in NAMESPACE.
+- Rebuilt local and remote execution around a versioned typed-JSON job and
+  result contract.
+- Added persistent cross-platform local queues with background workers,
+  cancellation, logs, restart recovery, and result provenance.
+- Added authenticated multi-tenant HTTP execution with token digests,
+  tenant-derived namespaces, checksums, quotas, resource limits, and locked
+  state transitions.
+- Added durable users, first/last-name administration, searchable/selectable
+  admin tables, job-state dashboards, worker logs, and matching light/dark
+  branding.
+- Added secure client/server settings persistence across package upgrades.
 
-## LibeRties 0.4.0
-
-* Admin Shiny GUI with dark mode, job push hub, Plumber API hardening, and LibeRation 0.4.0 integration.
-
-## LibeRties 0.1.0
-
-* Initial release as **LibeRties** (Task Infrastructure and Execution Service).
-  Remote job scheduler with Plumber API, container/local worker launcher,
-  API token authentication, per-user resource limits, dataset MD5 verification,
-  and admin Shiny application.
+This release is an architectural and API break from the 0.4.x series.

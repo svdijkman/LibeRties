@@ -1,79 +1,40 @@
-# LibeRties — Task Infrastructure and Execution Service
+# LibeRties
 
-Remote job scheduling for LibeRation: container sandboxes, API tokens, per-user limits, and an admin Shiny app.
+LibeRties provides durable local and remote job execution for the LibeR
+population PK/PD modelling system. It uses a versioned typed-JSON contract,
+background R workers, per-tenant namespaces, authenticated HTTP access,
+restart recovery, quotas, resource limits, integrity checks, cancellation,
+logs, and result provenance.
 
-## Quick start
+## Local queue
 
 ```r
-install.packages(c("plumber", "jsonlite", "digest", "callr"))
-R CMD INSTALL LibeRties
-
 library(LibeRties)
 
-# Configure sandbox (default: %LOCALAPPDATA%/LibeRties on Windows)
-ls_config_set(sandbox_root = "C:/liberties/sandbox", launcher = "local")
-# Important: restart ls_run_api() and ls_run_admin() after changing sandbox_root.
-
-# Create admin token and a user with limits
-ls_admin_token_set("change-me-admin")
-u <- ls_user_create("alice", limits = list(
-  max_concurrent_jobs = 2,
-  max_disk_mb = 5120,
-  max_cpu = 4,
-  max_memory_mb = 8192
-))
-u$token  # save this — shown once
-
-# Start API + admin UI
-ls_run_api()    # http://0.0.0.0:8080
-ls_run_admin()  # http://127.0.0.1:8081
+queue <- ls_local_queue("~/LibeR/workspace/.jobs")
+queue$poll(start = TRUE)
 ```
 
-## Client (LibeRation)
+LibeRation creates and restores this persistent queue automatically when
+`liber_gui()` is launched with LibeRties installed.
+
+## Remote service
 
 ```r
-nm_remote_server_add("HPC", "http://cluster:8080", "alice", token = u$token)
-job <- nm_job_submit(model, data, method = "FO", server = "srv_...")
-nm_job_status(job$id)
-fit <- nm_job_result(job$id)
+library(LibeRties)
+
+root <- "D:/liberties-data"
+user <- ls_user_create(root, "alice", first_name = "Alice")
+# Store user$token securely; it is returned only when created or rotated.
+ls_run_api(root, host = "127.0.0.1", port = 8000L)
 ```
 
-The LibeRation Shiny app adds **Add remote server** on the Jobs tab and a **Run on** cluster selector in the estimation dialog.
+Bind the R service to a private or loopback interface and terminate TLS at a
+maintained reverse proxy for remote deployment. Production hosting should add
+OS-account or container isolation around the restricted worker processes.
 
-## Admin Shiny
+The administration interface is launched with `ls_run_admin()`. Persistent
+users and job history are read from `LIBERTIES_ROOT` or
+`options(LibeRties.root = ...)`, not from the installed package directory.
 
-Manage users, per-user limits (concurrent jobs, disk, CPU, memory), API tokens, datasets (with MD5), and view all jobs.
-
-## Docker worker
-
-Build from repo root:
-
-```bash
-docker build -f LibeRties/inst/docker/Dockerfile -t liberties-worker:latest .
-```
-
-Set `launcher = "docker"` in config.
-
-Environment variables use the `LIBERTIES_*` prefix (legacy `LIBERATION_*` names still work).
-
-## Documentation
-
-```r
-?LibeRties
-?ls_run_api
-?ls_user_create
-```
-
-Regenerate manuals from source:
-
-```r
-roxygen2::roxygenise("path/to/LibeRties")
-```
-
-## Vignette
-
-```r
-vignette("getting-started", package = "LibeRties")
-```
-
-Requires **knitr**, **rmarkdown**, and Pandoc.
+LibeRties requires R 4.1 or newer and is MIT licensed.

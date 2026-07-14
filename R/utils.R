@@ -1,185 +1,184 @@
-#' @keywords internal
-`%||%` <- function(x, y) {
-  if (is.null(x) || (length(x) == 1L && is.na(x))) y else x
-}
+`%||%` <- function(x, y) if (is.null(x)) y else x
 
-#' @keywords internal
+.ls_stop <- function(..., call. = FALSE) stop(..., call. = call.)
+
 .ls_now <- function() {
-  format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z")
+  format(Sys.time(), "%Y-%m-%dT%H:%M:%OS3Z", tz = "UTC")
 }
 
-#' @keywords internal
-.ls_new_id <- function(prefix = "job") {
-  paste0(prefix, "_", format(Sys.time(), "%Y%m%d_%H%M%S"), "_",
-         substr(digest::digest(runif(1)), 1L, 6L))
-}
-
-#' @keywords internal
-.ls_read_json <- function(path, default = list()) {
-  if (!file.exists(path)) {
-    return(default)
+.ls_safe_component <- function(x, what = "path component") {
+  x <- as.character(x)
+  if (length(x) != 1L || is.na(x) || !nzchar(x) ||
+      !grepl("^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$", x) ||
+      x %in% c(".", "..")) {
+    .ls_stop("Invalid ", what, ": use 1-128 ASCII letters, digits, '.', '_', or '-'.")
   }
-  tryCatch(
-    jsonlite::read_json(path, simplifyVector = TRUE),
-    error = function(e) default
+  x
+}
+
+.ls_default_root <- function() {
+  configured <- Sys.getenv("LIBERTIES_ROOT", unset = "")
+  if (nzchar(configured)) return(path.expand(configured))
+  configured <- getOption("LibeRties.root", "")
+  if (length(configured) == 1L && !is.na(configured) && nzchar(configured)) {
+    return(path.expand(configured))
+  }
+  file.path(tools::R_user_dir("LibeRties", "data"), "queue")
+}
+
+.ls_ensure_dir <- function(path) {
+  if (!dir.exists(path) && !dir.create(path, recursive = TRUE, showWarnings = FALSE)) {
+    .ls_stop("Unable to create directory: ", path)
+  }
+  normalized <- normalizePath(path, winslash = "/", mustWork = TRUE)
+  if (.Platform$OS.type != "windows") Sys.chmod(normalized, mode = "0700")
+  normalized
+}
+
+.ls_worker_env <- function(job_dir) {
+  keep <- c("PATH", "SystemRoot", "WINDIR", "TEMP", "TMP", "TMPDIR",
+            "HOME", "USERPROFILE", "R_LIBS_USER", "R_LIBS_SITE")
+  current <- Sys.getenv(keep, unset = NA_character_)
+  current <- current[!is.na(current) & nzchar(current)]
+  c(
+    current, R_ENVIRON_USER = "", R_PROFILE_USER = "", R_HISTFILE = "",
+    OMP_NUM_THREADS = "1", OPENBLAS_NUM_THREADS = "1", MKL_NUM_THREADS = "1",
+    VECLIB_MAXIMUM_THREADS = "1", NUMEXPR_NUM_THREADS = "1",
+    LIBER_JOB_DIR = normalizePath(job_dir, winslash = "/", mustWork = TRUE)
   )
 }
 
-#' @keywords internal
-.ls_write_json <- function(x, path) {
-  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
-  jsonlite::write_json(x, path, auto_unbox = TRUE, pretty = TRUE)
-  invisible(x)
+.ls_resource_usage <- function(pid) {
+  handle <- ps::ps_handle(as.integer(pid))
+  memory <- ps::ps_memory_info(handle)
+  cpu <- ps::ps_cpu_times(handle)
+  list(
+    memory_mb = as.numeric(memory[["rss"]]) / 1024^2,
+    cpu_seconds = sum(as.numeric(cpu[c("user", "system", "children_user", "children_system")]),
+                      na.rm = TRUE)
+  )
 }
 
-#' @keywords internal
-.ls_hash_token <- function(token) {
-  digest::digest(token, algo = "sha256")
-}
-
-#' @keywords internal
-.ls_generate_token <- function() {
-  # 256-bit cryptographically-random token. Strong enough to also serve as the
-  # secret from which per-user at-rest encryption keys are derived.
-  rnd <- if (requireNamespace("sodium", quietly = TRUE)) {
-    sodium::bin2hex(sodium::random(32L))
-  } else {
-    # Fallback: 32 bytes from the OS CSPRNG via R's own generator seeded pool.
-    paste(sprintf("%02x", as.integer(sample.int(256L, 32L, replace = TRUE) - 1L)),
-          collapse = "")
-  }
-  paste0("lr_", format(Sys.time(), "%Y%m%d"), "_", rnd)
-}
-
-#' @keywords internal
-.ls_sanitize_user <- function(username) {
-  u <- gsub("[^a-zA-Z0-9._-]", "", as.character(username))
-  if (!nzchar(u)) {
-    stop("Invalid username.", call. = FALSE)
-  }
-  u
-}
-
-#' @keywords internal
-.ls_user_sandbox <- function(username) {
-  file.path(ls_sandbox_root(), "sandboxes", .ls_sanitize_user(username))
-}
-
-#' @keywords internal
-.ls_user_jobs_root <- function(username) {
-  file.path(.ls_user_sandbox(username), "jobs")
-}
-
-#' Validate a job id before it is ever turned into a filesystem path.
-#'
-#' A job id arrives from the client (status/log/result/cancel routes) and is
-#' concatenated into a path under the user's jobs root. Without validation an
-#' attacker can supply "../../otheruser/jobs/x" or an absolute path to escape
-#' their sandbox and read/cancel another tenant's GDPR-sensitive jobs. We
-#' allow only a conservative id charset and explicitly reject traversal
-#' sequences and path separators.
-#' @keywords internal
-.ls_sanitize_job_id <- function(job_id) {
-  id <- as.character(job_id %||% "")[1L]
-  if (!nzchar(id) ||
-      grepl("[/\\\\]", id) ||
-      grepl("(^|[/\\\\])\\.\\.([/\\\\]|$)", id) ||
-      identical(id, "..") ||
-      !grepl("^[A-Za-z0-9._-]+$", id)) {
-    stop("Invalid job id.", call. = FALSE)
-  }
-  id
-}
-
-#' @keywords internal
-.ls_job_path <- function(username, job_id) {
-  job_id <- .ls_sanitize_job_id(job_id)
-  root <- .ls_user_jobs_root(username)
-  path <- file.path(root, job_id)
-  # Defensive: ensure the (normalized) job path stays inside the user's jobs
-  # root even if the sanitizer above is ever weakened. normalizePath does not
-  # require the path to exist (mustWork = FALSE).
-  norm_root <- normalizePath(root, winslash = "/", mustWork = FALSE)
-  norm_path <- normalizePath(path, winslash = "/", mustWork = FALSE)
-  prefix <- paste0(norm_root, "/")
-  if (!identical(norm_path, norm_root) &&
-      substr(norm_path, 1L, nchar(prefix)) != prefix) {
-    stop("Invalid job id.", call. = FALSE)
-  }
+.ls_job_dir <- function(root, user, id) {
+  user <- .ls_safe_component(user, "user id")
+  id <- .ls_safe_component(id, "job id")
+  root <- .ls_ensure_dir(root)
+  candidate <- file.path(root, "users", user, "jobs", id)
+  parent <- .ls_ensure_dir(dirname(candidate))
+  path <- file.path(parent, basename(candidate))
+  root_cmp <- if (.Platform$OS.type == "windows") tolower(root) else root
+  path_cmp <- if (.Platform$OS.type == "windows") tolower(path) else path
+  prefix <- paste0(root_cmp, "/")
+  if (!startsWith(path_cmp, prefix)) .ls_stop("Resolved job path escaped the queue root.")
   path
 }
 
-#' @keywords internal
-.ls_dir_size_mb <- function(path) {
-  if (!dir.exists(path)) {
-    return(0)
+.ls_atomic_save_rds <- function(object, path) {
+  dir <- .ls_ensure_dir(dirname(path))
+  tmp <- tempfile("write-", tmpdir = dir, fileext = ".rds")
+  backup <- paste0(path, ".previous")
+  on.exit(unlink(tmp, force = TRUE), add = TRUE)
+  saveRDS(object, tmp, version = 3)
+  if (file.exists(path)) {
+    unlink(backup, force = TRUE)
+    if (!file.rename(path, backup)) .ls_stop("Unable to rotate metadata file: ", path)
   }
-  files <- list.files(path, recursive = TRUE, full.names = TRUE)
-  if (length(files) == 0L) {
-    return(0)
+  if (!file.rename(tmp, path)) {
+    if (file.exists(backup)) file.rename(backup, path)
+    .ls_stop("Unable to publish file: ", path)
   }
-  sum(file.info(files)$size, na.rm = TRUE) / (1024 * 1024)
+  if (.Platform$OS.type != "windows") Sys.chmod(path, mode = "0600")
+  unlink(backup, force = TRUE)
+  invisible(path)
 }
 
-#' @keywords internal
-.ls_pkg_version <- function(pkg) {
-  if (!requireNamespace(pkg, quietly = TRUE)) {
-    return("")
+.ls_read_rds <- function(path, attempts = 4L) {
+  last <- NULL
+  for (i in seq_len(attempts)) {
+    candidate <- if (file.exists(path)) path else if (file.exists(paste0(path, ".previous"))) {
+      paste0(path, ".previous")
+    } else path
+    value <- tryCatch(suppressWarnings(readRDS(candidate)), error = function(e) {
+      last <<- e
+      NULL
+    })
+    if (!is.null(value)) return(value)
+    if (i < attempts) Sys.sleep(0.01)
   }
-  as.character(utils::packageVersion(pkg))
+  .ls_stop("Unable to read ", path, ": ", conditionMessage(last))
 }
 
-#' @keywords internal
-.ls_version_info <- function() {
-  list(
-    LibeRties = .ls_pkg_version("LibeRties"),
-    LibeRation = .ls_pkg_version("LibeRation"),
-    LibeRtAD = .ls_pkg_version("LibeRtAD")
+.ls_meta_path <- function(job_dir) file.path(job_dir, "metadata.rds")
+.ls_payload_path <- function(job_dir) file.path(job_dir, "payload.rds")
+.ls_result_path <- function(job_dir) file.path(job_dir, "result.rds")
+
+.ls_read_meta <- function(job_dir) .ls_read_rds(.ls_meta_path(job_dir))
+.ls_write_meta <- function(job_dir, metadata) {
+  metadata$updated <- .ls_now()
+  .ls_atomic_save_rds(metadata, .ls_meta_path(job_dir))
+}
+
+.ls_with_job_lock <- function(job_dir, operation, timeout = 5, stale_after = 30) {
+  lock <- file.path(job_dir, ".metadata.lock")
+  started <- proc.time()[["elapsed"]]
+  repeat {
+    if (dir.create(lock, showWarnings = FALSE)) break
+    age <- tryCatch(as.numeric(difftime(Sys.time(), file.info(lock)$mtime, units = "secs")),
+                    error = function(e) 0)
+    if (is.finite(age) && age > stale_after) {
+      unlink(lock, recursive = TRUE, force = TRUE)
+      next
+    }
+    if (proc.time()[["elapsed"]] - started >= timeout) {
+      .ls_stop("Timed out acquiring job metadata lock: ", basename(job_dir), ".")
+    }
+    Sys.sleep(0.01)
+  }
+  on.exit(unlink(lock, recursive = TRUE, force = TRUE), add = TRUE)
+  operation()
+}
+
+.ls_update_meta <- function(job_dir, update, allowed_status = NULL) {
+  .ls_with_job_lock(job_dir, function() {
+    metadata <- .ls_read_meta(job_dir)
+    if (!is.null(allowed_status) && !metadata$status %in% allowed_status) return(metadata)
+    for (name in names(update)) metadata[[name]] <- update[[name]]
+    .ls_write_meta(job_dir, metadata)
+    metadata
+  })
+}
+
+.ls_md5 <- function(path) unname(tools::md5sum(path)[[1L]])
+
+.ls_sha256 <- function(path) {
+  connection <- file(path, open = "rb")
+  on.exit(close(connection), add = TRUE)
+  unname(paste0(openssl::sha256(connection)))
+}
+
+.ls_digest_matches <- function(path, metadata, prefix) {
+  sha_name <- paste0(prefix, "_sha256")
+  md5_name <- paste0(prefix, "_md5")
+  expected_sha <- as.character(metadata[[sha_name]] %||% "")
+  if (nzchar(expected_sha)) return(identical(.ls_sha256(path), expected_sha))
+  expected_md5 <- as.character(metadata[[md5_name]] %||% "")
+  nzchar(expected_md5) && identical(.ls_md5(path), expected_md5)
+}
+
+.ls_random_hex <- function(bytes) {
+  paste(sprintf("%02x", as.integer(openssl::rand_bytes(as.integer(bytes)))), collapse = "")
+}
+
+.ls_new_id <- function() {
+  paste0(format(Sys.time(), "%Y%m%dT%H%M%S", tz = "UTC"), "-", .ls_random_hex(16L))
+}
+
+.ls_terminal <- function(status) status %in% c("completed", "failed", "cancelled")
+
+.ls_empty_jobs <- function() {
+  data.frame(
+    id = character(), user = character(), type = character(), label = character(),
+    status = character(), submitted = character(), started = character(),
+    finished = character(), stringsAsFactors = FALSE
   )
-}
-
-#' @keywords internal
-.ls_startup_info <- function() {
-  users <- .ls_users_load()
-  list(
-    sandbox = ls_sandbox_root(),
-    users_file = .ls_users_path(),
-    n_users = length(users)
-  )
-}
-
-#' @keywords internal
-.ls_rds_from_raw <- function(raw) {
-  is_gzip <- length(raw) >= 2L &&
-    identical(raw[1:2], as.raw(c(0x1f, 0x8b)))
-  con <- if (is_gzip) {
-    gzcon(rawConnection(raw, "r"))
-  } else {
-    rawConnection(raw, "r")
-  }
-  on.exit(close(con), add = TRUE)
-  readRDS(con)
-}
-
-#' @keywords internal
-.ls_plumber_error_handler <- function(req, res, err) {
-  msg <- conditionMessage(err)
-  if (grepl("^Unauthorized", msg)) {
-    res$status <- 401L
-    return(list(error = msg))
-  }
-  if (identical(msg, "Admin access denied.")) {
-    res$status <- 403L
-    return(list(error = msg))
-  }
-  if (grepl(
-    "^(User account is disabled|Unknown user|Invalid username|Concurrent job limit|Disk quota)",
-    msg
-  )) {
-    res$status <- 403L
-    return(list(error = msg))
-  }
-  res$status <- 500L
-  message("LibeRties API internal error: ", msg)
-  list(error = "Internal server error.")
 }
