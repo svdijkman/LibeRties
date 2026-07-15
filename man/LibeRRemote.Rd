@@ -6,6 +6,17 @@
 \description{
 LibeRties remote-server client
 }
+\section{Public fields}{
+  \if{html}{\out{<div class="r6-fields">}}
+  \describe{
+    \item{\code{url}}{Normalized HTTP(S) service base URL.}
+
+    \item{\code{token}}{Bearer token used for authenticated requests.}
+
+    \item{\code{timeout}}{Per-request timeout in seconds.}
+  }
+  \if{html}{\out{</div>}}
+}
 \section{Methods}{
 \subsection{Public methods}{
   \itemize{
@@ -24,10 +35,23 @@ LibeRties remote-server client
 \if{html}{\out{<a id="method-LibeRRemote-initialize"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRRemote-initialize}{}}}
 \subsection{\code{LibeRRemote$new()}}{
+  Configure an authenticated remote client.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRRemote$new(url, token, timeout = 60)}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{url}}{HTTP(S) service base URL.}
+      \item{\code{token}}{Bearer token issued by [ls_user_create()].}
+      \item{\code{timeout}}{Per-request timeout in seconds.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    A new `LibeRRemote` object.
   }
 }
 
@@ -35,10 +59,14 @@ LibeRties remote-server client
 \if{html}{\out{<a id="method-LibeRRemote-authenticate"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRRemote-authenticate}{}}}
 \subsection{\code{LibeRRemote$authenticate()}}{
+  Verify the bearer token and return the authenticated user metadata.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRRemote$authenticate()}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    Server authentication metadata.
   }
 }
 
@@ -46,10 +74,21 @@ LibeRties remote-server client
 \if{html}{\out{<a id="method-LibeRRemote-submit"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRRemote-submit}{}}}
 \subsection{\code{LibeRRemote$submit()}}{
+  Submit a typed, non-executable job payload.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRRemote$submit(job)}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{job}}{A job created by [ls_job()].}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    The durable remote job identifier.
   }
 }
 
@@ -57,10 +96,14 @@ LibeRties remote-server client
 \if{html}{\out{<a id="method-LibeRRemote-list"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRRemote-list}{}}}
 \subsection{\code{LibeRRemote$list()}}{
+  List jobs belonging to the authenticated user.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRRemote$list()}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    A data frame of remote jobs.
   }
 }
 
@@ -68,10 +111,21 @@ LibeRties remote-server client
 \if{html}{\out{<a id="method-LibeRRemote-status"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRRemote-status}{}}}
 \subsection{\code{LibeRRemote$status()}}{
+  Read the status and metadata of one remote job.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRRemote$status(id)}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{id}}{Durable remote job identifier.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    A named metadata list.
   }
 }
 
@@ -79,10 +133,21 @@ LibeRties remote-server client
 \if{html}{\out{<a id="method-LibeRRemote-result"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRRemote-result}{}}}
 \subsection{\code{LibeRRemote$result()}}{
+  Download and validate a completed result.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRRemote$result(id)}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{id}}{Durable remote job identifier.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    The reconstructed result object.
   }
 }
 
@@ -90,10 +155,22 @@ LibeRties remote-server client
 \if{html}{\out{<a id="method-LibeRRemote-logs"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRRemote-logs}{}}}
 \subsection{\code{LibeRRemote$logs()}}{
+  Download a remote worker log stream.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRRemote$logs(id, stream = c("stdout", "stderr"))}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{id}}{Durable remote job identifier.}
+      \item{\code{stream}}{Standard-output or standard-error stream.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    A character vector containing log lines.
   }
 }
 
@@ -101,10 +178,21 @@ LibeRties remote-server client
 \if{html}{\out{<a id="method-LibeRRemote-cancel"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRRemote-cancel}{}}}
 \subsection{\code{LibeRRemote$cancel()}}{
+  Request cancellation of a queued or running remote job.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRRemote$cancel(id)}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{id}}{Durable remote job identifier.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    `TRUE` if the server accepted cancellation.
   }
 }
 

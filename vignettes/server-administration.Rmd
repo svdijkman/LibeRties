@@ -1,0 +1,116 @@
+---
+title: "Server administration and deployment"
+author: "Sven C. van Dijkman"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Server administration and deployment}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+## Persistent server root
+
+The server root owns the user registry and per-tenant job namespaces. Choose a
+stable directory outside the installed R package. The admin GUI reads
+`LIBERTIES_ROOT` or `options(LibeRties.root = ...)` when no explicit root is
+supplied.
+
+```{r root}
+library(LibeRties)
+root <- tempfile("liberties-server-")
+server <- ls_server(root, max_workers_per_user = 2L)
+server$root
+```
+
+## User lifecycle
+
+`ls_user_create()` returns a bearer token once. Only its digest is stored, so
+the plaintext token must be transferred and retained securely.
+
+```{r users}
+user <- ls_user_create(
+  root,
+  username = "alice",
+  first_name = "Alice",
+  last_name = "Example",
+  limits = list(
+    max_concurrent_jobs = 2,
+    max_runtime_seconds = 7200,
+    max_memory_mb = 8192,
+    max_storage_mb = 20480
+  )
+)
+
+token <- user$token
+ls_user_list(root)[, c("username", "first_name", "last_name", "enabled")]
+```
+
+```{r update-users, eval=FALSE}
+ls_user_update(root, "alice", enabled = FALSE)
+new_token <- ls_user_rotate_token(root, "alice")
+ls_user_delete(root, "alice", remove_jobs = FALSE)
+```
+
+Rotation invalidates the previous token. Deleting a user is refused while
+jobs are active; job history is retained unless `remove_jobs = TRUE` is
+explicitly requested.
+
+## Start the HTTP API
+
+```{r api, eval=FALSE}
+ls_run_api(
+  root = root,
+  host = "127.0.0.1",
+  port = 8000,
+  max_workers_per_user = 2
+)
+```
+
+Loopback is the secure default. A client on the same machine can connect
+directly. Remote clients need a reachable address and firewall rule. A
+reverse proxy is not technically required, but it is the recommended way to
+provide TLS, request limits, hardened timeouts, access logging, and certificate
+renewal.
+
+For example, expose `https://liberties.example.org` through a maintained proxy
+and forward only to `127.0.0.1:8000`. Do not bind an unencrypted bearer-token
+service to a public network.
+
+## Administration GUI
+
+```{r admin, eval=FALSE}
+Sys.setenv(LIBERTIES_ROOT = root)
+Sys.setenv(LIBERTIES_ADMIN_TOKEN = "a-separate-admin-secret")
+ls_run_admin(host = "127.0.0.1")
+```
+
+The GUI provides searchable user administration, selectable job tables,
+worker logs, state-specific runtime counts, and light/dark themes. User and
+job tables are read from the persistent server root; restarting or
+reinstalling the package must not erase them.
+
+The admin token protects the administration application and must be distinct
+from user bearer tokens. Place the admin GUI behind stronger network access
+controls for production use.
+
+## Operational recommendations
+
+- Back up the server root consistently and test restoration.
+- Keep LibeRtAD, LibeRation, and LibeRties versions aligned across clients and
+  workers.
+- Run the service under a dedicated least-privilege OS account.
+- Add container or OS-user isolation for mutually untrusted tenants.
+- Terminate TLS at a maintained reverse proxy and restrict request sizes.
+- Monitor disk, memory, worker failures, queue latency, and repeated
+  authentication failures.
+- Retain manifests, package versions, logs, and result checksums with modelling
+  records.
+
+LibeRties supplies execution durability and application-level tenancy. Formal
+validation, regulated-computing controls, disaster-recovery qualification,
+electronic signatures, and submission governance remain deployment-specific
+responsibilities.

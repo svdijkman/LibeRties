@@ -21,6 +21,13 @@ ls_local_queue(
 \item{limits}{Named resource limits, including wall time, CPU time, memory,
 payload, result, and storage quotas.}
 }
+\value{
+A persistent `LibeRQueue` object.
+}
 \description{
 Create a local LibeR queue
+}
+\examples{
+queue <- ls_local_queue(tempfile("liberties-queue-"), max_workers = 1L)
+queue$list()
 }

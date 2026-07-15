@@ -8,6 +8,15 @@ This object is the transport-independent server boundary used by a local
 test host and, later, the HTTP adapter. Every job operation derives the user
 namespace from the bearer token; callers cannot nominate another tenant.
 }
+\section{Public fields}{
+  \if{html}{\out{<div class="r6-fields">}}
+  \describe{
+    \item{\code{root}}{Normalized persistent server storage directory.}
+
+    \item{\code{max_workers_per_user}}{Host-level simultaneous-worker ceiling per tenant.}
+  }
+  \if{html}{\out{</div>}}
+}
 \section{Methods}{
 \subsection{Public methods}{
   \itemize{
@@ -27,10 +36,22 @@ namespace from the bearer token; callers cannot nominate another tenant.
 \if{html}{\out{<a id="method-LibeRServer-initialize"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRServer-initialize}{}}}
 \subsection{\code{LibeRServer$new()}}{
+  Create or reopen the transport-independent server core.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRServer$new(root = .ls_default_root(), max_workers_per_user = 2L)}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{root}}{Persistent server storage directory.}
+      \item{\code{max_workers_per_user}}{Host-level simultaneous-worker ceiling per tenant.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    A new `LibeRServer` object.
   }
 }
 
@@ -38,10 +59,21 @@ namespace from the bearer token; callers cannot nominate another tenant.
 \if{html}{\out{<a id="method-LibeRServer-authenticate"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRServer-authenticate}{}}}
 \subsection{\code{LibeRServer$authenticate()}}{
+  Authenticate a bearer token without exposing credential material.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRServer$authenticate(token)}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{token}}{Bearer token issued by [ls_user_create()].}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    User metadata and effective limits.
   }
 }
 
@@ -49,10 +81,23 @@ namespace from the bearer token; callers cannot nominate another tenant.
 \if{html}{\out{<a id="method-LibeRServer-submit"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRServer-submit}{}}}
 \subsection{\code{LibeRServer$submit()}}{
+  Submit a job to the authenticated user's isolated queue.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRServer$submit(token, job, start = TRUE)}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{token}}{Bearer token issued by [ls_user_create()].}
+      \item{\code{job}}{A job created by [ls_job()].}
+      \item{\code{start}}{Start available work immediately.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    The durable job identifier, invisibly.
   }
 }
 
@@ -60,10 +105,22 @@ namespace from the bearer token; callers cannot nominate another tenant.
 \if{html}{\out{<a id="method-LibeRServer-poll"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRServer-poll}{}}}
 \subsection{\code{LibeRServer$poll()}}{
+  Poll the authenticated user's queue.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRServer$poll(token, start = TRUE)}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{token}}{Bearer token issued by [ls_user_create()].}
+      \item{\code{start}}{Start available work immediately.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    The current job table, invisibly.
   }
 }
 
@@ -71,10 +128,21 @@ namespace from the bearer token; callers cannot nominate another tenant.
 \if{html}{\out{<a id="method-LibeRServer-list"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRServer-list}{}}}
 \subsection{\code{LibeRServer$list()}}{
+  List jobs for the authenticated user.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRServer$list(token)}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{token}}{Bearer token issued by [ls_user_create()].}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    A data frame of durable jobs.
   }
 }
 
@@ -82,10 +150,22 @@ namespace from the bearer token; callers cannot nominate another tenant.
 \if{html}{\out{<a id="method-LibeRServer-status"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRServer-status}{}}}
 \subsection{\code{LibeRServer$status()}}{
+  Read metadata for one authenticated-user job.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRServer$status(token, id)}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{token}}{Bearer token issued by [ls_user_create()].}
+      \item{\code{id}}{Durable job identifier.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    A named metadata list.
   }
 }
 
@@ -93,10 +173,22 @@ namespace from the bearer token; callers cannot nominate another tenant.
 \if{html}{\out{<a id="method-LibeRServer-result"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRServer-result}{}}}
 \subsection{\code{LibeRServer$result()}}{
+  Read and size-check one completed result.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRServer$result(token, id)}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{token}}{Bearer token issued by [ls_user_create()].}
+      \item{\code{id}}{Durable job identifier.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    The deserialized result object.
   }
 }
 
@@ -104,10 +196,23 @@ namespace from the bearer token; callers cannot nominate another tenant.
 \if{html}{\out{<a id="method-LibeRServer-logs"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRServer-logs}{}}}
 \subsection{\code{LibeRServer$logs()}}{
+  Read a worker log for an authenticated-user job.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRServer$logs(token, id, stream = c("stdout", "stderr"))}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{token}}{Bearer token issued by [ls_user_create()].}
+      \item{\code{id}}{Durable job identifier.}
+      \item{\code{stream}}{Standard-output or standard-error stream.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    A character vector containing log lines.
   }
 }
 
@@ -115,10 +220,23 @@ namespace from the bearer token; callers cannot nominate another tenant.
 \if{html}{\out{<a id="method-LibeRServer-cancel"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRServer-cancel}{}}}
 \subsection{\code{LibeRServer$cancel()}}{
+  Cancel an authenticated-user job.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRServer$cancel(token, id)}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{token}}{Bearer token issued by [ls_user_create()].}
+      \item{\code{id}}{Durable job identifier.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    `TRUE` when cancellation changed the job state and `FALSE` when
+  the job was already terminal, invisibly.
   }
 }
 

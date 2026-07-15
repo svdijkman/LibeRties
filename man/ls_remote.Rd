@@ -13,6 +13,13 @@ ls_remote(url, token, timeout = 60)
 
 \item{timeout}{HTTP timeout in seconds.}
 }
+\value{
+A configured `LibeRRemote` client.
+}
 \description{
 Connect to a LibeRties remote server
+}
+\examples{
+remote <- ls_remote("https://liberties.example.org", "replace-with-token")
+remote$url
 }

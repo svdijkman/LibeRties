@@ -1,0 +1,111 @@
+---
+title: "Persistent local and remote job queues"
+author: "Sven C. van Dijkman"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Persistent local and remote job queues}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+## Job contract
+
+LibeRties executes LibeRation simulations and estimations through a versioned,
+typed job contract. A job contains a serializable `nm_model`, event data,
+named entry-point arguments, and an optional label. It must never contain a
+live `NMEngine` external pointer.
+
+```{r capabilities}
+library(LibeRties)
+ls_queue_capabilities()
+```
+
+Remote transport uses typed JSON. Model expression IR is recompiled from
+semantic fields by the receiving host; the server does not deserialize an RDS
+payload supplied over HTTP and does not expose an arbitrary-code endpoint.
+
+## Create a local queue
+
+```{r queue}
+queue <- ls_local_queue(
+  root = tempfile("liberties-queue-"),
+  user = "local",
+  max_workers = 1L,
+  limits = list(
+    max_runtime_seconds = 3600,
+    max_memory_mb = 4096,
+    max_queued_jobs = 100
+  )
+)
+queue
+queue$list()
+```
+
+The queue root contains durable job metadata, checksums, payloads, results,
+and log streams. Reopening the same root recovers terminal history and checks
+whether previously running worker processes are still alive.
+
+## Submit and monitor work
+
+```{r submit, eval=FALSE}
+job <- ls_job(
+  "estimate",
+  model = model,
+  data = data,
+  arguments = list(
+    method = "FOCEI",
+    covariance = TRUE,
+    print_every = 10,
+    n_cores = 2
+  ),
+  label = "FOCEI base model"
+)
+
+id <- queue$submit(job)
+queue$status(id)
+queue$logs(id, "stdout")
+final <- queue$wait(id, timeout = 3600)
+
+if (identical(final$status, "completed")) {
+  fit <- queue$result(id)
+}
+```
+
+States are `queued`, `running`, `completed`, `failed`, and `cancelled`.
+`$poll()` reaps workers, enforces limits, recovers untracked jobs, and starts
+queued work when capacity is available. `$cancel()` terminates tracked work
+and durably records cancellation.
+
+## Integrity and provenance
+
+Payload and result SHA-256 digests are recorded in metadata and verified on
+read. Each worker runs in a fresh R process with a scrubbed environment and a
+per-job working directory. Runtime, CPU, memory, result-size, queue, and
+storage limits are applied at the queue boundary.
+
+This is application-level isolation. A production multi-user host should add
+OS-account or container isolation where the threat model requires protection
+from native-code compromise.
+
+## Connect to a remote service
+
+```{r remote, eval=FALSE}
+remote <- ls_remote(
+  "https://liberties.example.org",
+  token = Sys.getenv("LIBERTIES_TOKEN")
+)
+
+remote$authenticate()
+id <- remote$submit(job)
+remote$status(id)
+remote$logs(id, "stdout")
+fit <- remote$result(id)
+```
+
+The remote client mirrors the local operations closely. HTTPS is strongly
+recommended outside a trusted private network because bearer tokens authorize
+all user operations.

@@ -106,14 +106,18 @@ ls_admin_gui <- function(root = .ls_default_root(),
       shiny::div(class = "la-brand", shiny::HTML(favicon),
                  shiny::div(shiny::strong("LibeRties"), shiny::span("Server administration"))),
       shiny::div(class = "la-header-meta", shiny::span(normalizePath(root, winslash = "/")),
-                 shiny::tags$button(
-                   type = "button", class = "btn la-quiet la-theme-button",
-                   onclick = "window.liberAdminToggleTheme();",
-                   shiny::span(class = "la-theme-label", "Dark theme")
+                 shiny::tags$label(
+                   class = "la-theme-toggle", title = "Toggle light and dark theme",
+                   shiny::span(class = "la-theme-label", "Light"),
+                   shiny::tags$input(
+                     type = "checkbox", class = "la-theme-checkbox",
+                     onchange = "window.liberAdminSetTheme(this.checked);"
+                   ),
+                   shiny::tags$i()
                  ),
                  shiny::actionButton("logout", "Sign out", class = "btn la-quiet"))
     ),
-    shiny::div(class = "la-notice-host", shiny::uiOutput("notice")),
+    shiny::div(class = "la-message-host", shiny::uiOutput("notice")),
     shiny::tabsetPanel(
       id = "admin_section", type = "tabs",
       shiny::tabPanel(
@@ -202,7 +206,7 @@ ls_admin_gui <- function(root = .ls_default_root(),
       shiny::tags$meta(name = "viewport", content = "width=device-width, initial-scale=1"),
       if (nzchar(favicon_href)) shiny::tags$link(rel = "icon", type = "image/svg+xml", href = favicon_href),
       shiny::tags$script(shiny::HTML(
-        "(function(){\n  function apply(dark){\n    document.body.classList.toggle('la-theme-dark', dark);\n    var label=dark?'Light theme':'Dark theme';\n    document.querySelectorAll('.la-theme-label').forEach(function(node){if(node.textContent!==label)node.textContent=label;});\n  }\n  window.liberAdminToggleTheme=function(){var dark=!document.body.classList.contains('la-theme-dark');try{localStorage.setItem('libertiesDarkTheme',dark?'1':'0');}catch(e){}apply(dark);};\n  function restore(){var dark=false;try{dark=localStorage.getItem('libertiesDarkTheme')==='1';}catch(e){}apply(dark);}\n  document.addEventListener('DOMContentLoaded',restore);\n  new MutationObserver(restore).observe(document.documentElement,{childList:true,subtree:true});\n})();"
+        "(function(){\n  var dark=false;\n  function apply(){\n    document.body.classList.toggle('la-theme-dark',dark);\n    document.querySelectorAll('.la-theme-checkbox').forEach(function(node){node.checked=dark;});\n    var label=dark?'Dark':'Light';\n    document.querySelectorAll('.la-theme-label').forEach(function(node){if(node.textContent!==label)node.textContent=label;});\n  }\n  window.liberAdminSetTheme=function(value){dark=!!value;try{localStorage.setItem('libertiesDarkTheme',dark?'1':'0');}catch(e){}apply();};\n  function restore(){try{dark=localStorage.getItem('libertiesDarkTheme')==='1';}catch(e){dark=false;}apply();}\n  document.addEventListener('DOMContentLoaded',restore);\n  new MutationObserver(apply).observe(document.documentElement,{childList:true,subtree:true});\n})();"
       )),
       shiny::tags$style(shiny::HTML(css))
     ),
@@ -293,8 +297,20 @@ ls_admin_gui <- function(root = .ls_default_root(),
     output$gate <- shiny::renderUI(if (authenticated()) admin_ui else login_ui)
     output$notice <- shiny::renderUI({
       item <- notice()
-      if (is.null(item)) return(NULL)
-      shiny::div(class = paste("la-notice", paste0("la-", item$level)), item$message)
+      if (is.null(item)) {
+        item <- list(
+          message = if (authenticated()) "Server administration ready." else
+            "Administrator authentication required.",
+          level = "info"
+        )
+      }
+      level <- as.character(item$level %||% "info")
+      if (!level %in% c("info", "success", "error", "token")) level <- "info"
+      shiny::div(
+        class = paste("la-notice la-message-bar", paste0("la-", level)),
+        shiny::span(class = paste("la-message-dot", paste0("la-dot-", level))),
+        shiny::span(class = "la-message-text", item$message)
+      )
     })
     output$users_list <- shiny::renderUI({
       frame <- users()

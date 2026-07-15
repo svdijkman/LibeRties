@@ -7,13 +7,27 @@
 LibeRQueue <- R6::R6Class(
   "LibeRQueue",
   public = list(
+    #' @field root Normalized persistent queue storage directory.
     root = NULL,
+    #' @field user Safe tenant namespace used by default for queue operations.
     user = NULL,
+    #' @field max_workers Maximum simultaneous background workers.
     max_workers = NULL,
+    #' @field limits Effective resource and storage limits.
     limits = NULL,
+    #' @field isolation Description of the worker isolation strategy.
     isolation = NULL,
+    #' @field processes Internal environment of live `callr` worker handles.
     processes = NULL,
 
+    #' @description
+    #' Create or reopen a persistent local queue.
+    #' @param root Persistent queue storage directory.
+    #' @param user Default isolated tenant namespace.
+    #' @param max_workers Maximum simultaneous background workers.
+    #' @param limits Named overrides for runtime, CPU, memory, payload, result,
+    #'   concurrency, queue, and storage limits.
+    #' @return A new `LibeRQueue` object.
     initialize = function(root = .ls_default_root(), user = "local",
                           max_workers = 1L, limits = list()) {
       self$root <- .ls_ensure_dir(root)
@@ -29,6 +43,12 @@ LibeRQueue <- R6::R6Class(
       .ls_ensure_dir(file.path(self$root, "users", self$user, "jobs"))
     },
 
+    #' @description
+    #' Persist a serializable job and optionally start available workers.
+    #' @param job A job created by [ls_job()].
+    #' @param user Tenant namespace receiving the job.
+    #' @param start Start available queued work immediately.
+    #' @return The durable job identifier, invisibly.
     submit = function(job, user = self$user, start = TRUE) {
       if (!inherits(job, "liber_job")) .ls_stop("`job` must be created by ls_job().")
       user <- .ls_safe_component(user, "user id")
@@ -67,6 +87,10 @@ LibeRQueue <- R6::R6Class(
       invisible(id)
     },
 
+    #' @description
+    #' Refresh worker state, enforce limits, recover jobs, and start queued work.
+    #' @param start Whether to start queued work when capacity is available.
+    #' @return The current job table, invisibly.
     poll = function(start = TRUE) {
       private$enforce_limits()
       private$reap()
@@ -75,12 +99,21 @@ LibeRQueue <- R6::R6Class(
       invisible(self$list())
     },
 
+    #' @description
+    #' Read durable metadata for one job.
+    #' @param id Durable job identifier.
+    #' @param user Tenant namespace owning the job.
+    #' @return A named metadata list.
     status = function(id, user = self$user) {
       job_dir <- .ls_job_dir(self$root, user, id)
       if (!file.exists(.ls_meta_path(job_dir))) .ls_stop("Unknown job id.")
       .ls_read_meta(job_dir)
     },
 
+    #' @description
+    #' List durable jobs in a tenant namespace.
+    #' @param user Tenant namespace to list.
+    #' @return A data frame ordered from newest to oldest submission.
     list = function(user = self$user) {
       user <- .ls_safe_component(user, "user id")
       root <- file.path(self$root, "users", user, "jobs")
@@ -100,6 +133,11 @@ LibeRQueue <- R6::R6Class(
       result[order(result$submitted, decreasing = TRUE), , drop = FALSE]
     },
 
+    #' @description
+    #' Read and verify a completed job result.
+    #' @param id Durable job identifier.
+    #' @param user Tenant namespace owning the job.
+    #' @return The deserialized job result.
     result = function(id, user = self$user) {
       job_dir <- .ls_job_dir(self$root, user, id)
       metadata <- .ls_read_meta(job_dir)
@@ -113,6 +151,12 @@ LibeRQueue <- R6::R6Class(
       .ls_read_rds(path)
     },
 
+    #' @description
+    #' Read a worker log stream.
+    #' @param id Durable job identifier.
+    #' @param user Tenant namespace owning the job.
+    #' @param stream Standard-output or standard-error stream.
+    #' @return A character vector containing log lines.
     logs = function(id, user = self$user, stream = c("stdout", "stderr")) {
       stream <- match.arg(stream)
       path <- file.path(.ls_job_dir(self$root, user, id), paste0(stream, ".log"))
@@ -120,6 +164,12 @@ LibeRQueue <- R6::R6Class(
       readLines(path, warn = FALSE, encoding = "UTF-8")
     },
 
+    #' @description
+    #' Cancel a queued or running job.
+    #' @param id Durable job identifier.
+    #' @param user Tenant namespace owning the job.
+    #' @return `TRUE` when cancellation changed the job state and `FALSE` when
+    #'   the job was already terminal, invisibly.
     cancel = function(id, user = self$user) {
       job_dir <- .ls_job_dir(self$root, user, id)
       metadata <- .ls_read_meta(job_dir)
@@ -135,6 +185,13 @@ LibeRQueue <- R6::R6Class(
       invisible(TRUE)
     },
 
+    #' @description
+    #' Poll until a job reaches a terminal state.
+    #' @param id Durable job identifier.
+    #' @param user Tenant namespace owning the job.
+    #' @param timeout Maximum elapsed seconds; `Inf` waits indefinitely.
+    #' @param poll_interval Delay between polls in seconds.
+    #' @return Final job metadata.
     wait = function(id, user = self$user, timeout = Inf, poll_interval = 0.1) {
       started <- proc.time()[["elapsed"]]
       repeat {
@@ -148,6 +205,10 @@ LibeRQueue <- R6::R6Class(
       }
     },
 
+    #' @description
+    #' Print queue location, capacity, limits, and job count.
+    #' @param ... Unused.
+    #' @return The queue, invisibly.
     print = function(...) {
       jobs <- self$list()
       cat("LibeR local queue\n")
@@ -345,6 +406,10 @@ LibeRQueue <- R6::R6Class(
 #' @param max_workers Maximum simultaneous worker subprocesses for this queue.
 #' @param limits Named resource limits, including wall time, CPU time, memory,
 #'   payload, result, and storage quotas.
+#' @return A persistent `LibeRQueue` object.
+#' @examples
+#' queue <- ls_local_queue(tempfile("liberties-queue-"), max_workers = 1L)
+#' queue$list()
 #' @export
 ls_local_queue <- function(root = .ls_default_root(), user = "local", max_workers = 1L,
                            limits = list()) {

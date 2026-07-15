@@ -20,7 +20,32 @@ test_that("server administration app uses an independent protected login", {
     session$flushReact()
     gate <- paste(as.character(output$gate), collapse = "\n")
     expect_match(gate, "LibeRties administration", fixed = TRUE)
+    expect_match(paste(as.character(output$notice), collapse = "\n"),
+                 "la-message-bar", fixed = TRUE)
   }))
+})
+
+test_that("admin visual controls match the client theme and message patterns", {
+  root <- tempfile("admin-theme-")
+  app <- ls_admin_gui(root, admin_token = "a-strong-admin-token")
+  css <- paste(readLines(
+    system.file("admin-assets", "admin.css", package = "LibeRties"),
+    warn = FALSE
+  ), collapse = "\n")
+  expect_match(css, ".la-theme-toggle", fixed = TRUE)
+  expect_match(css, ".la-message-bar", fixed = TRUE)
+  expect_match(css, ".table.table-striped", fixed = TRUE)
+  expect_match(css, "background:var(--la-soft)", fixed = TRUE)
+  shiny::testServer(app[["serverFuncSource"]](), {
+    session$setInputs(admin_token = "a-strong-admin-token", login = 1)
+    session$flushReact()
+    gate <- paste(as.character(output$gate), collapse = "\n")
+    expect_match(gate, "la-theme-toggle", fixed = TRUE)
+    expect_match(gate, "la-theme-checkbox", fixed = TRUE)
+    notice <- paste(as.character(output$notice), collapse = "\n")
+    expect_match(notice, "la-message-dot", fixed = TRUE)
+    expect_match(notice, "Administrator session authenticated", fixed = TRUE)
+  })
 })
 
 test_that("admin login and create-user controls drive the server registry", {

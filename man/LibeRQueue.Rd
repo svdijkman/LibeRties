@@ -7,6 +7,23 @@
 Each user receives a separate filesystem namespace. Live jobs run in fresh
 `callr` R processes and reconstruct C++ pointers from serialized models.
 }
+\section{Public fields}{
+  \if{html}{\out{<div class="r6-fields">}}
+  \describe{
+    \item{\code{root}}{Normalized persistent queue storage directory.}
+
+    \item{\code{user}}{Safe tenant namespace used by default for queue operations.}
+
+    \item{\code{max_workers}}{Maximum simultaneous background workers.}
+
+    \item{\code{limits}}{Effective resource and storage limits.}
+
+    \item{\code{isolation}}{Description of the worker isolation strategy.}
+
+    \item{\code{processes}}{Internal environment of live `callr` worker handles.}
+  }
+  \if{html}{\out{</div>}}
+}
 \section{Methods}{
 \subsection{Public methods}{
   \itemize{
@@ -27,6 +44,7 @@ Each user receives a separate filesystem namespace. Live jobs run in fresh
 \if{html}{\out{<a id="method-LibeRQueue-initialize"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRQueue-initialize}{}}}
 \subsection{\code{LibeRQueue$new()}}{
+  Create or reopen a persistent local queue.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRQueue$new(
@@ -37,16 +55,43 @@ Each user receives a separate filesystem namespace. Live jobs run in fresh
 )}
     \if{html}{\out{</div>}}
   }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{root}}{Persistent queue storage directory.}
+      \item{\code{user}}{Default isolated tenant namespace.}
+      \item{\code{max_workers}}{Maximum simultaneous background workers.}
+      \item{\code{limits}}{Named overrides for runtime, CPU, memory, payload, result,
+concurrency, queue, and storage limits.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    A new `LibeRQueue` object.
+  }
 }
 
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-LibeRQueue-submit"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRQueue-submit}{}}}
 \subsection{\code{LibeRQueue$submit()}}{
+  Persist a serializable job and optionally start available workers.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRQueue$submit(job, user = self$user, start = TRUE)}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{job}}{A job created by [ls_job()].}
+      \item{\code{user}}{Tenant namespace receiving the job.}
+      \item{\code{start}}{Start available queued work immediately.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    The durable job identifier, invisibly.
   }
 }
 
@@ -54,10 +99,21 @@ Each user receives a separate filesystem namespace. Live jobs run in fresh
 \if{html}{\out{<a id="method-LibeRQueue-poll"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRQueue-poll}{}}}
 \subsection{\code{LibeRQueue$poll()}}{
+  Refresh worker state, enforce limits, recover jobs, and start queued work.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRQueue$poll(start = TRUE)}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{start}}{Whether to start queued work when capacity is available.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    The current job table, invisibly.
   }
 }
 
@@ -65,10 +121,22 @@ Each user receives a separate filesystem namespace. Live jobs run in fresh
 \if{html}{\out{<a id="method-LibeRQueue-status"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRQueue-status}{}}}
 \subsection{\code{LibeRQueue$status()}}{
+  Read durable metadata for one job.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRQueue$status(id, user = self$user)}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{id}}{Durable job identifier.}
+      \item{\code{user}}{Tenant namespace owning the job.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    A named metadata list.
   }
 }
 
@@ -76,10 +144,21 @@ Each user receives a separate filesystem namespace. Live jobs run in fresh
 \if{html}{\out{<a id="method-LibeRQueue-list"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRQueue-list}{}}}
 \subsection{\code{LibeRQueue$list()}}{
+  List durable jobs in a tenant namespace.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRQueue$list(user = self$user)}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{user}}{Tenant namespace to list.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    A data frame ordered from newest to oldest submission.
   }
 }
 
@@ -87,10 +166,22 @@ Each user receives a separate filesystem namespace. Live jobs run in fresh
 \if{html}{\out{<a id="method-LibeRQueue-result"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRQueue-result}{}}}
 \subsection{\code{LibeRQueue$result()}}{
+  Read and verify a completed job result.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRQueue$result(id, user = self$user)}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{id}}{Durable job identifier.}
+      \item{\code{user}}{Tenant namespace owning the job.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    The deserialized job result.
   }
 }
 
@@ -98,10 +189,23 @@ Each user receives a separate filesystem namespace. Live jobs run in fresh
 \if{html}{\out{<a id="method-LibeRQueue-logs"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRQueue-logs}{}}}
 \subsection{\code{LibeRQueue$logs()}}{
+  Read a worker log stream.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRQueue$logs(id, user = self$user, stream = c("stdout", "stderr"))}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{id}}{Durable job identifier.}
+      \item{\code{user}}{Tenant namespace owning the job.}
+      \item{\code{stream}}{Standard-output or standard-error stream.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    A character vector containing log lines.
   }
 }
 
@@ -109,10 +213,23 @@ Each user receives a separate filesystem namespace. Live jobs run in fresh
 \if{html}{\out{<a id="method-LibeRQueue-cancel"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRQueue-cancel}{}}}
 \subsection{\code{LibeRQueue$cancel()}}{
+  Cancel a queued or running job.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRQueue$cancel(id, user = self$user)}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{id}}{Durable job identifier.}
+      \item{\code{user}}{Tenant namespace owning the job.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    `TRUE` when cancellation changed the job state and `FALSE` when
+  the job was already terminal, invisibly.
   }
 }
 
@@ -120,10 +237,24 @@ Each user receives a separate filesystem namespace. Live jobs run in fresh
 \if{html}{\out{<a id="method-LibeRQueue-wait"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRQueue-wait}{}}}
 \subsection{\code{LibeRQueue$wait()}}{
+  Poll until a job reaches a terminal state.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRQueue$wait(id, user = self$user, timeout = Inf, poll_interval = 0.1)}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{id}}{Durable job identifier.}
+      \item{\code{user}}{Tenant namespace owning the job.}
+      \item{\code{timeout}}{Maximum elapsed seconds; `Inf` waits indefinitely.}
+      \item{\code{poll_interval}}{Delay between polls in seconds.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    Final job metadata.
   }
 }
 
@@ -131,10 +262,21 @@ Each user receives a separate filesystem namespace. Live jobs run in fresh
 \if{html}{\out{<a id="method-LibeRQueue-print"></a>}}
 \if{latex}{\out{\hypertarget{method-LibeRQueue-print}{}}}
 \subsection{\code{LibeRQueue$print()}}{
+  Print queue location, capacity, limits, and job count.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{LibeRQueue$print(...)}
     \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{...}}{Unused.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    The queue, invisibly.
   }
 }
 

@@ -11,6 +11,13 @@ ls_server(root = .ls_default_root(), max_workers_per_user = 2L)
 
 \item{max_workers_per_user}{Host-level worker ceiling per tenant.}
 }
+\value{
+A `LibeRServer` object.
+}
 \description{
 Create the authenticated LibeRties server core
+}
+\examples{
+server <- ls_server(tempfile("liberties-server-"))
+server$root
 }

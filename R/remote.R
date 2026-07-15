@@ -123,10 +123,19 @@ ls_run_api <- function(root = .ls_default_root(), host = "127.0.0.1", port = 800
 LibeRRemote <- R6::R6Class(
   "LibeRRemote",
   public = list(
+    #' @field url Normalized HTTP(S) service base URL.
     url = NULL,
+    #' @field token Bearer token used for authenticated requests.
     token = NULL,
+    #' @field timeout Per-request timeout in seconds.
     timeout = NULL,
 
+    #' @description
+    #' Configure an authenticated remote client.
+    #' @param url HTTP(S) service base URL.
+    #' @param token Bearer token issued by [ls_user_create()].
+    #' @param timeout Per-request timeout in seconds.
+    #' @return A new `LibeRRemote` object.
     initialize = function(url, token, timeout = 60) {
       self$url <- sub("/+$", "", as.character(url))
       self$token <- as.character(token)
@@ -138,13 +147,23 @@ LibeRRemote <- R6::R6Class(
       }
     },
 
+    #' @description
+    #' Verify the bearer token and return the authenticated user metadata.
+    #' @return Server authentication metadata.
     authenticate = function() .ls_remote_call(self, "GET", "/v1/auth"),
 
+    #' @description
+    #' Submit a typed, non-executable job payload.
+    #' @param job A job created by [ls_job()].
+    #' @return The durable remote job identifier.
     submit = function(job) {
       response <- .ls_remote_call(self, "POST", "/v1/jobs", ls_job_to_wire(job))
       as.character(response$id)
     },
 
+    #' @description
+    #' List jobs belonging to the authenticated user.
+    #' @return A data frame of remote jobs.
     list = function() {
       jobs <- .ls_remote_call(self, "GET", "/v1/jobs")$jobs
       if (!length(jobs)) return(.ls_empty_jobs())
@@ -155,10 +174,18 @@ LibeRRemote <- R6::R6Class(
       result
     },
 
+    #' @description
+    #' Read the status and metadata of one remote job.
+    #' @param id Durable remote job identifier.
+    #' @return A named metadata list.
     status = function(id) {
       .ls_remote_call(self, "GET", paste0("/v1/jobs/", utils::URLencode(id, reserved = TRUE)))
     },
 
+    #' @description
+    #' Download and validate a completed result.
+    #' @param id Durable remote job identifier.
+    #' @return The reconstructed result object.
     result = function(id) {
       payload <- .ls_remote_call(
         self, "GET", paste0("/v1/jobs/", utils::URLencode(id, reserved = TRUE), "/result")
@@ -166,6 +193,11 @@ LibeRRemote <- R6::R6Class(
       ls_result_from_wire(payload)
     },
 
+    #' @description
+    #' Download a remote worker log stream.
+    #' @param id Durable remote job identifier.
+    #' @param stream Standard-output or standard-error stream.
+    #' @return A character vector containing log lines.
     logs = function(id, stream = c("stdout", "stderr")) {
       stream <- match.arg(stream)
       payload <- .ls_remote_call(
@@ -175,6 +207,10 @@ LibeRRemote <- R6::R6Class(
       .ls_wire_character(payload$lines)
     },
 
+    #' @description
+    #' Request cancellation of a queued or running remote job.
+    #' @param id Durable remote job identifier.
+    #' @return `TRUE` if the server accepted cancellation.
     cancel = function(id) {
       payload <- .ls_remote_call(
         self, "DELETE", paste0("/v1/jobs/", utils::URLencode(id, reserved = TRUE))
@@ -188,5 +224,9 @@ LibeRRemote <- R6::R6Class(
 #' @param url Server base URL.
 #' @param token Bearer token issued by [ls_user_create()].
 #' @param timeout HTTP timeout in seconds.
+#' @return A configured `LibeRRemote` client.
+#' @examples
+#' remote <- ls_remote("https://liberties.example.org", "replace-with-token")
+#' remote$url
 #' @export
 ls_remote <- function(url, token, timeout = 60) LibeRRemote$new(url, token, timeout)

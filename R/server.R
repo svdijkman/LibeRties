@@ -283,9 +283,16 @@ ls_user_delete <- function(root, username, remove_jobs = FALSE) {
 LibeRServer <- R6::R6Class(
   "LibeRServer",
   public = list(
+    #' @field root Normalized persistent server storage directory.
     root = NULL,
+    #' @field max_workers_per_user Host-level simultaneous-worker ceiling per tenant.
     max_workers_per_user = NULL,
 
+    #' @description
+    #' Create or reopen the transport-independent server core.
+    #' @param root Persistent server storage directory.
+    #' @param max_workers_per_user Host-level simultaneous-worker ceiling per tenant.
+    #' @return A new `LibeRServer` object.
     initialize = function(root = .ls_default_root(), max_workers_per_user = 2L) {
       self$root <- .ls_ensure_dir(root)
       self$max_workers_per_user <- as.integer(max_workers_per_user)
@@ -297,8 +304,18 @@ LibeRServer <- R6::R6Class(
       .ls_registry_path(self$root)
     },
 
+    #' @description
+    #' Authenticate a bearer token without exposing credential material.
+    #' @param token Bearer token issued by [ls_user_create()].
+    #' @return User metadata and effective limits.
     authenticate = function(token) .ls_authorize(self$root, token),
 
+    #' @description
+    #' Submit a job to the authenticated user's isolated queue.
+    #' @param token Bearer token issued by [ls_user_create()].
+    #' @param job A job created by [ls_job()].
+    #' @param start Start available work immediately.
+    #' @return The durable job identifier, invisibly.
     submit = function(token, job, start = TRUE) {
       auth <- self$authenticate(token)
       if (!inherits(job, "liber_job")) .ls_stop("`job` must be created by ls_job().")
@@ -318,21 +335,40 @@ LibeRServer <- R6::R6Class(
       queue$submit(job, start = start)
     },
 
+    #' @description
+    #' Poll the authenticated user's queue.
+    #' @param token Bearer token issued by [ls_user_create()].
+    #' @param start Start available work immediately.
+    #' @return The current job table, invisibly.
     poll = function(token, start = TRUE) {
       auth <- self$authenticate(token)
       private$queue_for(auth)$poll(start = start)
     },
 
+    #' @description
+    #' List jobs for the authenticated user.
+    #' @param token Bearer token issued by [ls_user_create()].
+    #' @return A data frame of durable jobs.
     list = function(token) {
       auth <- self$authenticate(token)
       private$queue_for(auth)$list()
     },
 
+    #' @description
+    #' Read metadata for one authenticated-user job.
+    #' @param token Bearer token issued by [ls_user_create()].
+    #' @param id Durable job identifier.
+    #' @return A named metadata list.
     status = function(token, id) {
       auth <- self$authenticate(token)
       private$queue_for(auth)$status(id)
     },
 
+    #' @description
+    #' Read and size-check one completed result.
+    #' @param token Bearer token issued by [ls_user_create()].
+    #' @param id Durable job identifier.
+    #' @return The deserialized result object.
     result = function(token, id) {
       auth <- self$authenticate(token)
       result <- private$queue_for(auth)$result(id)
@@ -343,11 +379,23 @@ LibeRServer <- R6::R6Class(
       result
     },
 
+    #' @description
+    #' Read a worker log for an authenticated-user job.
+    #' @param token Bearer token issued by [ls_user_create()].
+    #' @param id Durable job identifier.
+    #' @param stream Standard-output or standard-error stream.
+    #' @return A character vector containing log lines.
     logs = function(token, id, stream = c("stdout", "stderr")) {
       auth <- self$authenticate(token)
       private$queue_for(auth)$logs(id, stream = match.arg(stream))
     },
 
+    #' @description
+    #' Cancel an authenticated-user job.
+    #' @param token Bearer token issued by [ls_user_create()].
+    #' @param id Durable job identifier.
+    #' @return `TRUE` when cancellation changed the job state and `FALSE` when
+    #'   the job was already terminal, invisibly.
     cancel = function(token, id) {
       auth <- self$authenticate(token)
       private$queue_for(auth)$cancel(id)
@@ -376,6 +424,10 @@ LibeRServer <- R6::R6Class(
 #' Create the authenticated LibeRties server core
 #' @param root Persistent server storage root.
 #' @param max_workers_per_user Host-level worker ceiling per tenant.
+#' @return A `LibeRServer` object.
+#' @examples
+#' server <- ls_server(tempfile("liberties-server-"))
+#' server$root
 #' @export
 ls_server <- function(root = .ls_default_root(), max_workers_per_user = 2L) {
   LibeRServer$new(root, max_workers_per_user)
