@@ -21,16 +21,35 @@
         !identical(job$version, 1L)) {
       .ls_stop("Unsupported or invalid job payload contract.")
     }
-    if (!requireNamespace("LibeRation", quietly = TRUE)) {
-      .ls_stop("LibeRation is not installed in the worker library paths.")
-    }
-    args <- c(list(model = job$model, data = job$data), job$arguments)
-    if (identical(job$type, "simulate")) {
-      do.call(LibeRation::nm_simulate, args)
-    } else if (identical(job$type, "estimate")) {
-      do.call(LibeRation::nm_est, args)
+    if (startsWith(job$type, "library_")) {
+      if (!requireNamespace("LibeRary", quietly = TRUE)) {
+        .ls_stop("LibeRary is not installed in the worker library paths.")
+      }
+      LibeRary::library_worker_task(job$type, job$data, job$arguments)
+    } else if (identical(job$type, "optimal_design")) {
+      if (!requireNamespace("LibeRality", quietly = TRUE)) {
+        .ls_stop("LibeRality is not installed in the worker library paths.")
+      }
+      LibeRality::lity_worker_task(job$model, job$data, job$arguments)
+    } else if (job$type %in% c("individualise", "regimen")) {
+      if (!requireNamespace("LibeRator", quietly = TRUE)) {
+        .ls_stop("LibeRator is not installed in the worker library paths.")
+      }
+      LibeRator::lator_worker_task(job$type, job$model, job$data, job$arguments)
     } else {
-      .ls_stop("Unsupported job type: ", job$type)
+      if (!requireNamespace("LibeRation", quietly = TRUE)) {
+        .ls_stop("LibeRation is not installed in the worker library paths.")
+      }
+      args <- c(list(model = job$model, data = job$data), job$arguments)
+      if (identical(job$type, "simulate")) {
+        do.call(LibeRation::nm_simulate, args)
+      } else if (identical(job$type, "estimate")) {
+        do.call(LibeRation::nm_est, args)
+      } else if (identical(job$type, "estimate_sequence")) {
+        do.call(LibeRation::nm_est_sequence, args)
+      } else {
+        .ls_stop("Unsupported job type: ", job$type)
+      }
     }
   }, error = identity)
   latest <- .ls_read_meta(job_dir)

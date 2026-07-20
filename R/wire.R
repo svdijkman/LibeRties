@@ -145,7 +145,7 @@
 }
 
 .ls_model_wire_fields <- c(
-  "INPUT", "ADVAN", "TRANS", "SS", "DOSECMP", "OBSCMP", "PRED", "ERROR",
+  "INPUT", "OUTPUT", "ADVAN", "TRANS", "SS", "DOSECMP", "OBSCMP", "PRED", "ERROR",
   "DES", "THETAS", "OMEGAS", "SIGMAS", "COVARIATES", "USE_ODE",
   "ODE_CONTROL", "IOV", "LIK_CONFIG", "SOLVER", "ERROR_TYPE", "GRAPH",
   "LAYOUT", "LANGUAGE"
@@ -177,6 +177,13 @@
 #' @export
 ls_job_to_wire <- function(job) {
   if (!inherits(job, "liber_job")) .ls_stop("`job` must be created by ls_job().")
+  if (startsWith(job$type, "library_")) {
+    return(list(
+      schema = "liber.job.wire", version = 1L, type = job$type,
+      label = job$label, created = job$created,
+      payload = .ls_wire_pack(job$data), arguments = .ls_wire_pack(job$arguments)
+    ))
+  }
   if (!inherits(job$model, "nm_model")) {
     .ls_stop("Remote wire jobs require a serializable LibeRation nm_model.")
   }
@@ -203,8 +210,31 @@ ls_job_from_wire <- function(payload) {
     .ls_stop("Unsupported or invalid LibeR JSON wire contract.")
   }
   type <- as.character(payload$type)
-  if (length(type) != 1L || !type %in% c("simulate", "estimate")) {
-    .ls_stop("Wire job type must be simulate or estimate.")
+  allowed <- c("simulate", "estimate", "estimate_sequence", "individualise", "regimen", "optimal_design",
+               "library_triage", "library_parse",
+               "library_index", "library_dual_extract", "library_assess",
+               "library_adjudicate")
+  if (length(type) != 1L || !type %in% allowed) {
+    .ls_stop("Unsupported wire job type.")
+  }
+  arguments <- .ls_wire_unpack(payload$arguments)
+  if (!is.list(arguments) || (length(arguments) && is.null(names(arguments)))) {
+    .ls_stop("Wire job arguments must be a named list.")
+  }
+  label <- as.character(payload$label %||% "")
+  created <- as.character(payload$created %||% "")
+  if (length(label) != 1L || is.na(label) || nchar(label, type = "bytes") > 1024L ||
+      length(created) != 1L || is.na(created) || nchar(created, type = "bytes") > 128L) {
+    .ls_stop("Wire job label or timestamp is invalid.")
+  }
+  if (startsWith(type, "library_")) {
+    literature_payload <- .ls_wire_unpack(payload$payload)
+    if (!is.list(literature_payload) || is.null(literature_payload$metadata)) {
+      .ls_stop("Wire literature payload is invalid.")
+    }
+    job <- ls_library_job(type, literature_payload, arguments, label)
+    job$created <- created
+    return(job)
   }
   model_fields <- .ls_wire_unpack(payload$model)
   if (!is.list(model_fields) || is.null(names(model_fields)) ||
@@ -217,17 +247,11 @@ ls_job_from_wire <- function(payload) {
   }
   model <- .ls_restore_model(model_fields)
   data <- .ls_wire_unpack(payload$data)
-  if (!is.data.frame(data)) .ls_stop("Wire job data must be a data frame.")
-  arguments <- .ls_wire_unpack(payload$arguments)
-  if (!is.list(arguments) || (length(arguments) && is.null(names(arguments)))) {
-    .ls_stop("Wire job arguments must be a named list.")
-  }
-  label <- as.character(payload$label %||% "")
-  created <- as.character(payload$created %||% "")
-  if (length(label) != 1L || is.na(label) || nchar(label, type = "bytes") > 1024L ||
-      length(created) != 1L || is.na(created) || nchar(created, type = "bytes") > 128L) {
-    .ls_stop("Wire job label or timestamp is invalid.")
-  }
+  if (identical(type, "optimal_design")) {
+    if (!is.list(data) || !identical(data$schema, "liberality.design")) {
+      .ls_stop("Wire optimal-design payload must be a LibeRality design.")
+    }
+  } else if (!is.data.frame(data)) .ls_stop("Wire job data must be a data frame.")
   job <- ls_job(type, model, data, arguments, label)
   job$created <- created
   job
@@ -299,7 +323,8 @@ ls_result_from_wire <- function(payload) {
   }
   if (!is.null(attributes$class)) {
     classes <- as.character(attributes$class)
-    allowed <- c("data.frame", "nm_dataset", "nm_fit", "matrix", "array")
+    allowed <- c("data.frame", "nm_dataset", "nm_fit", "nm_individual_fit",
+                 "lator_assessment", "lator_regimen_comparison", "matrix", "array")
     if (length(setdiff(classes, allowed))) .ls_stop("Remote result contains an unsupported class.")
   }
   for (name in names(attributes)) attr(result, name) <- attributes[[name]]
@@ -325,6 +350,22 @@ ls_result_from_wire <- function(payload) {
         length(result$omega) != nrow(result$model$OMEGAS) ||
         nrow(result$eta) != length(unique(result$data$ID))) {
       .ls_stop("Remote nm_fit parameter dimensions are inconsistent.")
+    }
+  }
+  if (inherits(result, "nm_individual_fit")) {
+    required <- c("eta", "eta_covariance", "model", "data", "predictions")
+    if (!is.list(result) || length(setdiff(required, names(result)))) {
+      .ls_stop("Remote individual-fit result is missing required fields.")
+    }
+    model_fields <- result$model[intersect(.ls_model_wire_fields, names(result$model))]
+    result$model <- .ls_restore_model(model_fields)
+    data <- as.data.frame(result$data, stringsAsFactors = FALSE)
+    data[grep("^\\.(ID_INDEX|source_row|generated|sort_priority)$", names(data))] <- NULL
+    result$data <- LibeRation::nm_dataset(data)
+    result$eta <- as.numeric(result$eta)
+    result$eta_covariance <- as.matrix(result$eta_covariance)
+    if (!identical(dim(result$eta_covariance), c(length(result$eta), length(result$eta)))) {
+      .ls_stop("Remote individual-fit covariance dimensions are inconsistent.")
     }
   }
   result

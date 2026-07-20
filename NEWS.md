@@ -1,4 +1,14 @@
+# LibeRties 0.6.1
+
+- Added typed local and remote queue execution for ordered LibeRation
+  estimation sequences, preserving stage configuration and model output
+  selections across the wire contract.
+
 # LibeRties 0.6.0
+
+- Extended the typed literature contract from indexing/assessment to the full
+  LibeRary pipeline: triage, Docling parsing, independent dual extraction, and
+  third-model adjudication.
 
 - Rebuilt local and remote execution around a versioned typed-JSON job and
   result contract.

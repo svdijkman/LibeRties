@@ -1,13 +1,14 @@
 #' Create a versioned LibeR execution job
 #'
-#' @param type `simulate` or `estimate`.
+#' @param type `simulate`, `estimate`, `estimate_sequence`, `individualise`, `regimen`, or
+#'   `optimal_design`.
 #' @param model A serializable LibeRation model (never a live external pointer).
 #' @param data A serializable NONMEM-style dataset.
 #' @param arguments Named arguments passed to the selected LibeRation entry point.
 #' @param label Optional human-readable label.
 #' @return A serializable `liber_job`.
 #' @export
-ls_job <- function(type = c("simulate", "estimate"), model, data,
+ls_job <- function(type = c("simulate", "estimate", "estimate_sequence", "individualise", "regimen", "optimal_design"), model, data,
                    arguments = list(), label = NULL) {
   type <- match.arg(type)
   if (missing(model) || inherits(model, "NMEngine")) {
@@ -33,6 +34,37 @@ ls_job <- function(type = c("simulate", "estimate"), model, data,
   tryCatch(serialize(job, NULL, version = 3), error = function(e) {
     .ls_stop("Job is not serializable: ", conditionMessage(e))
   })
+  job
+}
+
+#' Create a typed LibeRary literature job
+#'
+#' @param type A typed LibeRary pipeline task.
+#' @param payload A data-only LibeRary payload.
+#' @param arguments Named worker controls, including sanitized provider config.
+#' @param label Optional label.
+#' @return A serializable `liber_job`.
+#' @export
+ls_library_job <- function(type = c("library_triage", "library_parse", "library_index",
+                                    "library_dual_extract", "library_assess",
+                                    "library_adjudicate"), payload,
+                           arguments = list(), label = NULL) {
+  type <- match.arg(type)
+  if (missing(payload) || !is.list(payload)) .ls_stop("`payload` must be a list.")
+  if (!is.list(arguments) || (length(arguments) && is.null(names(arguments)))) {
+    .ls_stop("`arguments` must be a named list.")
+  }
+  forbidden <- function(x) {
+    if (is.function(x) || is.environment(x) || typeof(x) == "externalptr") return(TRUE)
+    if (is.list(x)) return(any(vapply(x, forbidden, logical(1))))
+    FALSE
+  }
+  if (forbidden(payload) || forbidden(arguments)) .ls_stop("Literature jobs may contain data only, not executable or pointer-backed values.")
+  job <- structure(list(schema = "liber.job", version = 1L, type = type,
+                        model = NULL, data = payload, arguments = arguments,
+                        label = as.character(label %||% "")[[1L]], created = .ls_now()),
+                   class = "liber_job")
+  tryCatch(serialize(job, NULL, version = 3), error = function(e) .ls_stop("Job is not serializable: ", conditionMessage(e)))
   job
 }
 
@@ -66,7 +98,13 @@ ls_job_manifest <- function(job) {
     payload_md5 = .ls_md5(tmp),
     payload_sha256 = .ls_sha256(tmp),
     integrity = "sha256",
-    requirements = list(LibeRation = ">= 0.6.0", LibeRtAD = ">= 0.6.0")
+    requirements = if (startsWith(job$type, "library_")) {
+      list(LibeRary = ">= 0.6.0", LibeRties = ">= 0.6.0")
+    } else if (identical(job$type, "optimal_design")) {
+      list(LibeRality = ">= 0.1.0", LibeRation = ">= 0.6.2", LibeRtAD = ">= 0.7.1")
+    } else if (job$type %in% c("individualise", "regimen")) {
+      list(LibeRator = ">= 0.1.0", LibeRation = ">= 0.6.1", LibeRtAD = ">= 0.6.0")
+    } else list(LibeRation = ">= 0.6.1", LibeRtAD = ">= 0.6.0")
   )
 }
 
@@ -75,9 +113,12 @@ ls_job_manifest <- function(job) {
 ls_queue_capabilities <- function() {
   list(
     contract = "liber.job/1",
-    job_types = c("simulate", "estimate"),
+    job_types = c("simulate", "estimate", "estimate_sequence", "individualise", "regimen", "optimal_design",
+                  "library_triage", "library_parse",
+                  "library_index", "library_dual_extract", "library_assess",
+                  "library_adjudicate"),
     states = c("queued", "running", "completed", "failed", "cancelled"),
-    worker = "restricted R subprocess with scrubbed environment and C++ LibeRation engine",
+    worker = "restricted R subprocess with scrubbed environment and typed LibeRation/LibeRality/LibeRator/LibeRary entry points",
     local_platform = R.version$platform,
     remote_target = c("Windows", "Linux", "macOS"),
     integrity = "SHA-256 payload and result digests (MD5 retained for v1 diagnostics)",

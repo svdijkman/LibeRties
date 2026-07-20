@@ -1,7 +1,7 @@
 Package: LibeRties
 Type: Package
 Title: Portable Job Execution for LibeR
-Version: 0.6.0
+Version: 0.6.1
 Authors@R: person("Sven C.", "van Dijkman",
     email = "svdijkman@users.noreply.github.com", role = c("aut", "cre"))
 Author: Sven C. van Dijkman [aut, cre]
@@ -27,7 +27,10 @@ Imports:
     shiny
 Suggests:
     knitr,
-    LibeRation (>= 0.6.0),
+    LibeRary (>= 0.6.0),
+    LibeRality (>= 0.1.0),
+    LibeRator (>= 0.1.0),
+    LibeRation (>= 0.6.1),
     rmarkdown,
     testthat (>= 3.0.0)
 VignetteBuilder: knitr

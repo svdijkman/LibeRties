@@ -10,6 +10,15 @@ test_that("job contract is serializable and checksummed", {
   expect_gt(manifest$payload_bytes, 0)
 })
 
+test_that("optimal design is an advertised typed job", {
+  job <- ls_job("optimal_design", model = list(version = 1L),
+                data = list(schema = "liberality.design", version = 1L),
+                arguments = list(operation = "evaluate"))
+  expect_equal(job$type, "optimal_design")
+  expect_true("optimal_design" %in% ls_queue_capabilities()$job_types)
+  expect_equal(ls_job_manifest(job)$requirements$LibeRality, ">= 0.1.0")
+})
+
 test_that("job ids use 128 bits of cryptographic randomness", {
   ids <- replicate(20, LibeRties:::.ls_new_id())
   expect_true(all(grepl("^[0-9]{8}T[0-9]{6}-[a-f0-9]{32}$", ids)))

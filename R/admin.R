@@ -202,7 +202,7 @@ ls_admin_gui <- function(root = .ls_default_root(),
   ui <- shiny::fluidPage(
     class = "la-page",
     shiny::tags$head(
-      shiny::tags$title("LibeRties administration"),
+      shiny::tags$title("LibeRties"),
       shiny::tags$meta(name = "viewport", content = "width=device-width, initial-scale=1"),
       if (nzchar(favicon_href)) shiny::tags$link(rel = "icon", type = "image/svg+xml", href = favicon_href),
       shiny::tags$script(shiny::HTML(

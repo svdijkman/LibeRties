@@ -5,7 +5,8 @@
 \title{Create a versioned LibeR execution job}
 \usage{
 ls_job(
-  type = c("simulate", "estimate"),
+  type = c("simulate", "estimate", "estimate_sequence", "individualise", "regimen",
+    "optimal_design"),
   model,
   data,
   arguments = list(),
@@ -13,7 +14,8 @@ ls_job(
 )
 }
 \arguments{
-\item{type}{`simulate` or `estimate`.}
+\item{type}{`simulate`, `estimate`, `estimate_sequence`, `individualise`, `regimen`, or
+`optimal_design`.}
 
 \item{model}{A serializable LibeRation model (never a live external pointer).}
 

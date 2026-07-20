@@ -23,6 +23,29 @@ test_that("JSON wire jobs rebuild models rather than trusting expression IR", {
   )
 })
 
+test_that("wire transport preserves sequential estimation stages and outputs", {
+  skip_if_not_installed("LibeRation")
+  model <- LibeRation::nm_model(
+    INPUT = c("ID", "TIME"), OUTPUT = "CL", ADVAN = 1,
+    PRED = "CL=THETA(1); V=THETA(2); S1=V", ERROR = "Y=F",
+    THETAS = data.frame(THETA = 1:2, Value = c(2, 20))
+  )
+  stages <- list(
+    LibeRation::nm_est_stage("FO", maxit = 1),
+    LibeRation::nm_est_stage("FOCE", maxit = 1)
+  )
+  rebuilt <- ls_job_decode(ls_job_encode(ls_job(
+    "estimate_sequence", model, data.frame(ID = 1, TIME = 0),
+    arguments = list(stages = stages)
+  )))
+  expect_equal(rebuilt$type, "estimate_sequence")
+  expect_equal(rebuilt$model$OUTPUT, "CL")
+  expect_equal(
+    vapply(rebuilt$arguments$stages, `[[`, character(1), "method"),
+    c("FO", "FOCE")
+  )
+})
+
 test_that("JSON wire preserves likelihood and mixture semantics", {
   skip_if_not_installed("LibeRation")
   model <- LibeRation::nm_model(
@@ -115,4 +138,43 @@ test_that("remote fitted results rebuild nested model and dataset classes", {
   expect_s3_class(decoded$model, "nm_model")
   expect_s3_class(decoded$data, "nm_dataset")
   expect_equal(predict(decoded)$IPRED, predict(fit)$IPRED, tolerance = 1e-10)
+})
+
+test_that("individualisation jobs retain the typed LibeRator contract", {
+  skip_if_not_installed("LibeRation", minimum_version = "0.6.1")
+  model <- LibeRation::nm_model(
+    INPUT = c("ID", "TIME", "EVID", "AMT", "DV", "MDV"), ADVAN = 1,
+    PRED = "CL=THETA(1)*exp(ETA(1));V=THETA(2);S1=V", ERROR = "Y=F+ERR(1)",
+    THETAS = data.frame(THETA = 1:2, Value = c(2, 20)),
+    OMEGAS = data.frame(OMEGA = 1, Value = 0.1),
+    SIGMAS = data.frame(SIGMA = 1, Value = 0.2)
+  )
+  data <- data.frame(ID = 1, TIME = c(0, 1), EVID = c(1, 0), AMT = c(100, 0),
+                     DV = c(NA, 4.5), MDV = c(1, 0))
+  job <- ls_job("individualise", model, data)
+  decoded <- ls_job_decode(ls_job_encode(job))
+  expect_identical(decoded$type, "individualise")
+  expect_s3_class(decoded$model, "nm_model")
+  expect_true("LibeRator" %in% names(ls_job_manifest(job)$requirements))
+  expect_true("individualise" %in% ls_queue_capabilities()$job_types)
+})
+
+test_that("remote individual-fit results rebuild model and dataset semantics", {
+  skip_if_not_installed("LibeRation", minimum_version = "0.6.1")
+  model <- LibeRation::nm_model(
+    INPUT = c("ID", "TIME", "EVID", "AMT", "DV", "MDV"), ADVAN = 1,
+    PRED = "CL=THETA(1)*exp(ETA(1));V=THETA(2);S1=V", ERROR = "Y=F+ERR(1)",
+    THETAS = data.frame(THETA = 1:2, Value = c(2, 20)),
+    OMEGAS = data.frame(OMEGA = 1, Value = 0.1),
+    SIGMAS = data.frame(SIGMA = 1, Value = 0.2)
+  )
+  data <- data.frame(ID = 1, TIME = c(0, 1, 4), EVID = c(1, 0, 0),
+                     AMT = c(100, 0, 0), DV = c(NA, 4.5, 3.2), MDV = c(1, 0, 0))
+  fit <- LibeRation::nm_individual_fit(model, data)
+  decoded <- ls_result_decode(ls_result_encode(fit))
+  expect_s3_class(decoded, "nm_individual_fit")
+  expect_s3_class(decoded$model, "nm_model")
+  expect_s3_class(decoded$data, "nm_dataset")
+  expect_equal(decoded$eta, unname(fit$eta))
+  expect_equal(decoded$eta_covariance, fit$eta_covariance)
 })
