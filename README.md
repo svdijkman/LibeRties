@@ -37,4 +37,10 @@ The administration interface is launched with `ls_run_admin()`. Persistent
 users and job history are read from `LIBERTIES_ROOT` or
 `options(LibeRties.root = ...)`, not from the installed package directory.
 
+## AI-assisted development
+
+GPT-5.6 was used as an AI engineering collaborator to help implement and review
+the typed job contracts, queue and server infrastructure, security controls, administration GUI, tests, and documentation.
+Architecture, threat-model decisions, validation criteria, and release approval remain the responsibility of the project owner.
+
 LibeRties requires R 4.1 or newer and is MIT licensed.
