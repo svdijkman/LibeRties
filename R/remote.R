@@ -33,21 +33,52 @@
 #' deserializer or an endpoint capable of evaluating submitted R code.
 #'
 #' @param server A [LibeRServer] instance.
+#' @param policy HTTP security and rate-limit policy.
 #' @return A configured Plumber router.
 #' @export
-ls_api <- function(server = ls_server()) {
+ls_api <- function(server = ls_server(), policy = ls_security_policy()) {
   if (!inherits(server, "LibeRServer")) .ls_stop("`server` must be a LibeRServer.")
+  if (!inherits(policy, "liberties_security_policy")) {
+    .ls_stop("`policy` must be created by ls_security_policy().")
+  }
   serializer <- plumber::serializer_unboxed_json(digits = 17, null = "null")
   api <- plumber::pr()
+  rate_state <- new.env(parent = emptyenv())
   api <- plumber::pr_set_error(api, function(req, res, err) .ls_api_error(res, err))
   api <- plumber::pr_filter(api, "security_headers", function(req, res) {
     res$setHeader("Cache-Control", "no-store")
     res$setHeader("X-Content-Type-Options", "nosniff")
     res$setHeader("X-Frame-Options", "DENY")
+    res$setHeader("Referrer-Policy", "no-referrer")
+    res$setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+    if (isTRUE(policy$production)) {
+      res$setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    }
+    plumber::forward()
+  })
+  api <- plumber::pr_filter(api, "rate_limit", function(req, res) {
+    credential <- tryCatch(.ls_bearer_token(req), error = function(error) "anonymous")
+    key <- if (identical(credential, "anonymous")) {
+      paste0("anonymous:", req$REMOTE_ADDR %||% "unknown")
+    } else paste0("token:", .ls_token_hash(credential))
+    bucket <- floor(as.numeric(Sys.time()) / 60)
+    state <- if (exists(key, rate_state, inherits = FALSE)) get(key, rate_state) else
+      list(bucket = bucket, count = 0L)
+    if (!identical(state$bucket, bucket)) state <- list(bucket = bucket, count = 0L)
+    state$count <- state$count + 1L
+    assign(key, state, rate_state)
+    res$setHeader("X-RateLimit-Limit", as.character(policy$requests_per_minute))
+    res$setHeader("X-RateLimit-Remaining",
+                  as.character(max(0L, policy$requests_per_minute - state$count)))
+    if (state$count > policy$requests_per_minute) {
+      res$status <- 429L
+      return(list(error = "Request rate limit exceeded."))
+    }
     plumber::forward()
   })
   api <- plumber::pr_get(api, "/v1/health", function() {
-    list(status = "ok", contract = "liber.job.wire/1", time = .ls_now())
+    list(status = "ok", contract = "liber.job.wire/2", result_contract = "liber.result.wire/2",
+         time = .ls_now())
   }, serializer = serializer)
   api <- plumber::pr_get(api, "/v1/auth", function(req) {
     auth <- server$authenticate(.ls_bearer_token(req))
@@ -92,10 +123,18 @@ ls_api <- function(server = ls_server()) {
 #' @param port TCP port.
 #' @param max_workers_per_user Host-level per-user worker ceiling.
 #' @param quiet Suppress Plumber startup messages.
+#' @param production Enforce production preflight. Defaults to `TRUE` for a
+#'   non-loopback host.
+#' @param behind_tls_proxy Confirm that HTTPS is terminated by a maintained
+#'   reverse proxy.
+#' @param policy Optional security policy.
 #' @export
 ls_run_api <- function(root = .ls_default_root(), host = "127.0.0.1", port = 8000L,
-                       max_workers_per_user = 2L, quiet = FALSE) {
-  api <- ls_api(ls_server(root, max_workers_per_user))
+                       max_workers_per_user = 2L, quiet = FALSE,
+                       production = !.ls_loopback(host), behind_tls_proxy = FALSE,
+                       policy = ls_security_policy(production = production)) {
+  ls_server_preflight(root, host, behind_tls_proxy, policy, strict = isTRUE(production))
+  api <- ls_api(ls_server(root, max_workers_per_user), policy = policy)
   api$run(host = host, port = as.integer(port), swagger = FALSE, quiet = quiet)
 }
 

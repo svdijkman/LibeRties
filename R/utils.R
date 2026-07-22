@@ -50,13 +50,35 @@
 
 .ls_resource_usage <- function(pid) {
   handle <- ps::ps_handle(as.integer(pid))
-  memory <- ps::ps_memory_info(handle)
-  cpu <- ps::ps_cpu_times(handle)
+  descendants <- tryCatch(ps::ps_children(handle, recursive = TRUE),
+                          error = function(error) list())
+  handles <- c(list(handle), descendants)
+  alive <- vapply(handles, function(value) {
+    isTRUE(tryCatch(ps::ps_is_running(value), error = function(error) FALSE))
+  }, logical(1))
+  handles <- handles[alive]
+  memory <- sum(vapply(handles, function(value) {
+    tryCatch(as.numeric(ps::ps_memory_info(value)[["rss"]]), error = function(error) 0)
+  }, numeric(1)), na.rm = TRUE)
+  cpu <- sum(vapply(handles, function(value) {
+    times <- tryCatch(ps::ps_cpu_times(value), error = function(error) NULL)
+    if (is.null(times)) 0 else sum(as.numeric(times[c("user", "system")]), na.rm = TRUE)
+  }, numeric(1)), na.rm = TRUE)
   list(
-    memory_mb = as.numeric(memory[["rss"]]) / 1024^2,
-    cpu_seconds = sum(as.numeric(cpu[c("user", "system", "children_user", "children_system")]),
-                      na.rm = TRUE)
+    memory_mb = memory / 1024^2,
+    cpu_seconds = cpu,
+    processes = length(handles)
   )
+}
+
+.ls_kill_process_tree <- function(pid) {
+  handle <- tryCatch(ps::ps_handle(as.integer(pid)), error = function(error) NULL)
+  if (is.null(handle)) return(invisible(FALSE))
+  descendants <- tryCatch(ps::ps_children(handle, recursive = TRUE),
+                          error = function(error) list())
+  for (child in rev(descendants)) try(ps::ps_kill(child), silent = TRUE)
+  try(ps::ps_kill(handle), silent = TRUE)
+  invisible(TRUE)
 }
 
 .ls_job_dir <- function(root, user, id) {
@@ -73,12 +95,51 @@
   path
 }
 
+.ls_storage_key <- function(required = FALSE) {
+  encoded <- Sys.getenv("LIBERTIES_STORAGE_KEY", unset = "")
+  if (!nzchar(encoded)) encoded <- getOption("LibeRties.storage_key", "")
+  encoded <- trimws(as.character(encoded %||% ""))
+  if (!nzchar(encoded)) {
+    if (isTRUE(required)) .ls_stop("LIBERTIES_STORAGE_KEY is required for encrypted storage.")
+    return(NULL)
+  }
+  if (length(encoded) != 1L || !grepl("^[A-Fa-f0-9]{64}$", encoded)) {
+    .ls_stop("LIBERTIES_STORAGE_KEY must be exactly 64 hexadecimal characters (256 bits).")
+  }
+  bytes <- substring(encoded, seq.int(1L, 63L, by = 2L), seq.int(2L, 64L, by = 2L))
+  as.raw(strtoi(bytes, base = 16L))
+}
+
+.ls_storage_wrap <- function(object) {
+  key <- .ls_storage_key()
+  if (is.null(key)) return(object)
+  list(
+    schema = "liberties.encrypted-rds", version = 1L,
+    key_id = substr(.ls_token_hash(paste(sprintf("%02x", as.integer(key)), collapse = "")), 1L, 16L),
+    payload = sodium::data_encrypt(serialize(object, NULL, version = 3L), key)
+  )
+}
+
+.ls_storage_unwrap <- function(object) {
+  if (!is.list(object) || !identical(object$schema %||% "", "liberties.encrypted-rds")) {
+    return(object)
+  }
+  if (!identical(as.integer(object$version), 1L) || !is.raw(object$payload)) {
+    .ls_stop("Encrypted LibeRties record is malformed.")
+  }
+  key <- .ls_storage_key(required = TRUE)
+  tryCatch(
+    unserialize(sodium::data_decrypt(object$payload, key)),
+    error = function(error) .ls_stop("Unable to authenticate or decrypt LibeRties storage.")
+  )
+}
+
 .ls_atomic_save_rds <- function(object, path) {
   dir <- .ls_ensure_dir(dirname(path))
   tmp <- tempfile("write-", tmpdir = dir, fileext = ".rds")
   backup <- paste0(path, ".previous")
   on.exit(unlink(tmp, force = TRUE), add = TRUE)
-  saveRDS(object, tmp, version = 3)
+  saveRDS(.ls_storage_wrap(object), tmp, version = 3)
   if (file.exists(path)) {
     unlink(backup, force = TRUE)
     if (!file.rename(path, backup)) .ls_stop("Unable to rotate metadata file: ", path)
@@ -98,7 +159,7 @@
     candidate <- if (file.exists(path)) path else if (file.exists(paste0(path, ".previous"))) {
       paste0(path, ".previous")
     } else path
-    value <- tryCatch(suppressWarnings(readRDS(candidate)), error = function(e) {
+    value <- tryCatch(.ls_storage_unwrap(suppressWarnings(readRDS(candidate))), error = function(e) {
       last <<- e
       NULL
     })

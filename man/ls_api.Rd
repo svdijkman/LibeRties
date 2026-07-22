@@ -4,10 +4,12 @@
 \alias{ls_api}
 \title{Build the authenticated LibeRties HTTP API}
 \usage{
-ls_api(server = ls_server())
+ls_api(server = ls_server(), policy = ls_security_policy())
 }
 \arguments{
 \item{server}{A [LibeRServer] instance.}
+
+\item{policy}{HTTP security and rate-limit policy.}
 }
 \value{
 A configured Plumber router.

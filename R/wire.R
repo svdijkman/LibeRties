@@ -144,14 +144,27 @@
   result
 }
 
-.ls_model_wire_fields <- c(
+.ls_model_wire_fields_v1 <- c(
   "INPUT", "OUTPUT", "ADVAN", "TRANS", "SS", "DOSECMP", "OBSCMP", "PRED", "ERROR",
   "DES", "THETAS", "OMEGAS", "SIGMAS", "COVARIATES", "USE_ODE",
   "ODE_CONTROL", "IOV", "LIK_CONFIG", "SOLVER", "ERROR_TYPE", "GRAPH",
   "LAYOUT", "LANGUAGE"
 )
 
-.ls_restore_model <- function(model_fields) {
+.ls_model_contract <- function(model) {
+  if (!requireNamespace("LibeRation", quietly = TRUE)) {
+    .ls_stop("LibeRation is required to serialize a remote model.")
+  }
+  if (utils::packageVersion("LibeRation") < "0.8.0") {
+    .ls_stop("Remote model contract v2 requires LibeRation 0.8.0 or newer.")
+  }
+  tryCatch(
+    LibeRation::nm_model_to_contract(model, version = 2L),
+    error = function(e) .ls_stop("Remote model serialization failed: ", conditionMessage(e))
+  )
+}
+
+.ls_restore_model_v1 <- function(model_fields) {
   if (!requireNamespace("LibeRation", quietly = TRUE)) {
     .ls_stop("LibeRation is required to validate a remote model.")
   }
@@ -171,6 +184,20 @@
   )
 }
 
+.ls_restore_model <- function(contract) {
+  if (!requireNamespace("LibeRation", quietly = TRUE)) {
+    .ls_stop("LibeRation is required to validate a remote model.")
+  }
+  if (is.list(contract) && identical(as.character(contract$schema %||% ""),
+                                     "liberation.model")) {
+    return(tryCatch(
+      LibeRation::nm_model_from_contract(contract),
+      error = function(e) .ls_stop("Remote model validation failed: ", conditionMessage(e))
+    ))
+  }
+  .ls_restore_model_v1(contract)
+}
+
 #' Convert a LibeR job to the non-executable JSON wire contract
 #' @param job A [ls_job()] object containing an `nm_model`.
 #' @return A JSON-compatible typed object.
@@ -179,7 +206,7 @@ ls_job_to_wire <- function(job) {
   if (!inherits(job, "liber_job")) .ls_stop("`job` must be created by ls_job().")
   if (startsWith(job$type, "library_")) {
     return(list(
-      schema = "liber.job.wire", version = 1L, type = job$type,
+      schema = "liber.job.wire", version = 2L, type = job$type,
       label = job$label, created = job$created,
       payload = .ls_wire_pack(job$data), arguments = .ls_wire_pack(job$arguments)
     ))
@@ -187,11 +214,10 @@ ls_job_to_wire <- function(job) {
   if (!inherits(job$model, "nm_model")) {
     .ls_stop("Remote wire jobs require a serializable LibeRation nm_model.")
   }
-  semantic_model <- unclass(job$model[.ls_model_wire_fields])
   list(
-    schema = "liber.job.wire", version = 1L, type = job$type,
+    schema = "liber.job.wire", version = 2L, type = job$type,
     label = job$label, created = job$created,
-    model = .ls_wire_pack(semantic_model), data = .ls_wire_pack(job$data),
+    model = .ls_wire_pack(.ls_model_contract(job$model)), data = .ls_wire_pack(job$data),
     arguments = .ls_wire_pack(job$arguments)
   )
 }
@@ -205,8 +231,9 @@ ls_job_to_wire <- function(job) {
 #' @return A validated `liber_job`.
 #' @export
 ls_job_from_wire <- function(payload) {
+  version <- suppressWarnings(as.integer(payload$version %||% NA_integer_))
   if (!is.list(payload) || !identical(as.character(payload$schema), "liber.job.wire") ||
-      !identical(as.integer(payload$version), 1L)) {
+      length(version) != 1L || is.na(version) || !version %in% c(1L, 2L)) {
     .ls_stop("Unsupported or invalid LibeR JSON wire contract.")
   }
   type <- as.character(payload$type)
@@ -236,16 +263,21 @@ ls_job_from_wire <- function(payload) {
     job$created <- created
     return(job)
   }
-  model_fields <- .ls_wire_unpack(payload$model)
-  if (!is.list(model_fields) || is.null(names(model_fields)) ||
-      length(setdiff(names(model_fields), .ls_model_wire_fields))) {
-    .ls_stop("Wire model contains invalid semantic fields.")
+  model_payload <- .ls_wire_unpack(payload$model)
+  if (version == 1L) {
+    if (!is.list(model_payload) || is.null(names(model_payload)) ||
+        length(setdiff(names(model_payload), .ls_model_wire_fields_v1))) {
+      .ls_stop("Wire model contains invalid semantic fields.")
+    }
+    required <- c("INPUT", "ADVAN", "PRED", "THETAS")
+    if (length(setdiff(required, names(model_payload)))) {
+      .ls_stop("Wire model is missing required semantic fields.")
+    }
+  } else if (!is.list(model_payload) ||
+             !identical(as.character(model_payload$schema %||% ""), "liberation.model")) {
+    .ls_stop("Wire model does not contain a LibeRation model contract.")
   }
-  required <- c("INPUT", "ADVAN", "PRED", "THETAS")
-  if (length(setdiff(required, names(model_fields)))) {
-    .ls_stop("Wire model is missing required semantic fields.")
-  }
-  model <- .ls_restore_model(model_fields)
+  model <- .ls_restore_model(model_payload)
   data <- .ls_wire_unpack(payload$data)
   if (identical(type, "optimal_design")) {
     if (!is.list(data) || !identical(data$schema, "liberality.design")) {
@@ -290,9 +322,14 @@ ls_job_decode <- function(json, max_bytes = 100 * 1024^2) {
 ls_result_to_wire <- function(result) {
   attributes <- attributes(result)
   attributes <- attributes[setdiff(names(attributes), c("names", "row.names", "dim", "dimnames"))]
+  transported <- result
+  if (inherits(transported, c("nm_fit", "nm_individual_fit")) &&
+      inherits(transported$model, "nm_model")) {
+    transported$model <- .ls_model_contract(transported$model)
+  }
   list(
-    schema = "liber.result.wire", version = 1L,
-    result = .ls_wire_pack(result), attributes = .ls_wire_pack(attributes)
+    schema = "liber.result.wire", version = 2L,
+    result = .ls_wire_pack(transported), attributes = .ls_wire_pack(attributes)
   )
 }
 
@@ -309,9 +346,10 @@ ls_result_encode <- function(result) {
 #' @param payload Parsed result wire object.
 #' @export
 ls_result_from_wire <- function(payload) {
+  version <- suppressWarnings(as.integer(payload$version %||% NA_integer_))
   if (!is.list(payload) ||
       !identical(as.character(payload$schema), "liber.result.wire") ||
-      !identical(as.integer(payload$version), 1L)) {
+      length(version) != 1L || is.na(version) || !version %in% c(1L, 2L)) {
     .ls_stop("Unsupported or invalid LibeR result wire contract.")
   }
   result <- .ls_wire_unpack(payload$result)
@@ -325,7 +363,13 @@ ls_result_from_wire <- function(payload) {
     classes <- as.character(attributes$class)
     allowed <- c("data.frame", "nm_dataset", "nm_fit", "nm_individual_fit",
                  "lator_assessment", "lator_regimen_comparison", "matrix", "array")
-    if (length(setdiff(classes, allowed))) .ls_stop("Remote result contains an unsupported class.")
+    extra <- setdiff(classes, allowed)
+    schema <- if (is.list(result)) as.character(result$schema %||% "") else ""
+    schema_class <-
+      (grepl("^liberality\\.", schema) && all(grepl("^lity_", extra))) ||
+      (grepl("^liberator\\.", schema) && all(grepl("^lator_", extra))) ||
+      (grepl("^liberary\\.", schema) && all(grepl("^(liberary|library)_", extra)))
+    if (length(extra) && !schema_class) .ls_stop("Remote result contains an unsupported class.")
   }
   for (name in names(attributes)) attr(result, name) <- attributes[[name]]
   if (inherits(result, "nm_fit")) {
@@ -333,11 +377,14 @@ ls_result_from_wire <- function(payload) {
     if (!is.list(result) || length(setdiff(required, names(result)))) {
       .ls_stop("Remote nm_fit result is missing required fields.")
     }
-    model_fields <- result$model[intersect(.ls_model_wire_fields, names(result$model))]
-    if (length(setdiff(c("INPUT", "ADVAN", "PRED", "THETAS"), names(model_fields)))) {
+    model_payload <- if (version == 1L) {
+      result$model[intersect(.ls_model_wire_fields_v1, names(result$model))]
+    } else result$model
+    if (version == 1L &&
+        length(setdiff(c("INPUT", "ADVAN", "PRED", "THETAS"), names(model_payload)))) {
       .ls_stop("Remote nm_fit contains an invalid model.")
     }
-    result$model <- .ls_restore_model(model_fields)
+    result$model <- .ls_restore_model(model_payload)
     data <- as.data.frame(result$data, stringsAsFactors = FALSE)
     data[grep("^\\.", names(data), value = TRUE)] <- NULL
     result$data <- tryCatch(
@@ -357,8 +404,10 @@ ls_result_from_wire <- function(payload) {
     if (!is.list(result) || length(setdiff(required, names(result)))) {
       .ls_stop("Remote individual-fit result is missing required fields.")
     }
-    model_fields <- result$model[intersect(.ls_model_wire_fields, names(result$model))]
-    result$model <- .ls_restore_model(model_fields)
+    model_payload <- if (version == 1L) {
+      result$model[intersect(.ls_model_wire_fields_v1, names(result$model))]
+    } else result$model
+    result$model <- .ls_restore_model(model_payload)
     data <- as.data.frame(result$data, stringsAsFactors = FALSE)
     data[grep("^\\.(ID_INDEX|source_row|generated|sort_priority)$", names(data))] <- NULL
     result$data <- LibeRation::nm_dataset(data)
@@ -367,6 +416,11 @@ ls_result_from_wire <- function(payload) {
     if (!identical(dim(result$eta_covariance), c(length(result$eta), length(result$eta)))) {
       .ls_stop("Remote individual-fit covariance dimensions are inconsistent.")
     }
+  }
+  if (length(class(result)) && any(grepl("^lity_", class(result))) &&
+      requireNamespace("LibeRality", quietly = TRUE) &&
+      "lity_contract_restore" %in% getNamespaceExports("LibeRality")) {
+    result <- LibeRality::lity_contract_restore(result)
   }
   result
 }

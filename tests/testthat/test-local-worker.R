@@ -17,7 +17,7 @@ test_that("local worker reconstructs and runs a LibeRation C++ engine", {
   expect_equal(status$status, "completed", info = status$error)
   result <- queue$result(id)
   expect_equal(result$IPRED, c(5, 5 * exp(-0.1)), tolerance = 1e-10)
-  expect_equal(status$isolation, "restricted-process")
+  expect_equal(status$isolation, "restricted-subprocess")
   expect_true(is.finite(status$peak_memory_mb))
   expect_equal(status$termination_reason, "completed normally")
 })

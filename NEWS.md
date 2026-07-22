@@ -1,3 +1,19 @@
+# LibeRties 0.7.0
+
+- Upgrades typed jobs and results to wire contract v2, while retaining read
+  compatibility with v1. The contract now preserves all current LibeRation
+  model semantics and typed LibeRality result classes.
+- Adds scoped and expiring tokens, per-token/IP request throttling, a
+  hash-chained administrative audit trail, production preflight checks, and
+  security response headers.
+- Adds optional authenticated at-rest encryption for queue RDS metadata,
+  payloads, and results using a server-owned key; checksums continue to verify
+  the encrypted artefacts.
+- Monitors and terminates complete worker process trees. Documentation and
+  status metadata now call the built-in boundary a restricted subprocess, not
+  an operating-system sandbox; production mode requires TLS termination and a
+  separately configured OS/container isolation layer.
+
 # LibeRties 0.6.1
 
 - Added typed local and remote queue execution for ordered LibeRation

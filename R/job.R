@@ -99,12 +99,12 @@ ls_job_manifest <- function(job) {
     payload_sha256 = .ls_sha256(tmp),
     integrity = "sha256",
     requirements = if (startsWith(job$type, "library_")) {
-      list(LibeRary = ">= 0.6.0", LibeRties = ">= 0.6.0")
+      list(LibeRary = ">= 0.7.2", LibeRties = ">= 0.7.0")
     } else if (identical(job$type, "optimal_design")) {
-      list(LibeRality = ">= 0.1.0", LibeRation = ">= 0.6.2", LibeRtAD = ">= 0.7.1")
+      list(LibeRality = ">= 0.2.0", LibeRation = ">= 0.8.0", LibeRtAD = ">= 0.7.5")
     } else if (job$type %in% c("individualise", "regimen")) {
-      list(LibeRator = ">= 0.1.0", LibeRation = ">= 0.6.1", LibeRtAD = ">= 0.6.0")
-    } else list(LibeRation = ">= 0.6.1", LibeRtAD = ">= 0.6.0")
+      list(LibeRator = ">= 0.2.3", LibeRation = ">= 0.8.0", LibeRtAD = ">= 0.7.5")
+    } else list(LibeRation = ">= 0.8.0", LibeRtAD = ">= 0.7.5")
   )
 }
 
@@ -113,16 +113,20 @@ ls_job_manifest <- function(job) {
 ls_queue_capabilities <- function() {
   list(
     contract = "liber.job/1",
+    wire_contract = "liber.job.wire/2",
+    result_contract = "liber.result.wire/2",
+    model_contract = "liberation.model/2",
     job_types = c("simulate", "estimate", "estimate_sequence", "individualise", "regimen", "optimal_design",
                   "library_triage", "library_parse",
                   "library_index", "library_dual_extract", "library_assess",
                   "library_adjudicate"),
     states = c("queued", "running", "completed", "failed", "cancelled"),
-    worker = "restricted R subprocess with scrubbed environment and typed LibeRation/LibeRality/LibeRator/LibeRary entry points",
+    worker = "restricted R subprocess with scrubbed environment, isolated working directory, process-tree accounting, and typed entry points",
     local_platform = R.version$platform,
     remote_target = c("Windows", "Linux", "macOS"),
     integrity = "SHA-256 payload and result digests (MD5 retained for v1 diagnostics)",
-    isolation = c("non-executable typed remote contract", "per-tenant filesystem",
-                  "wall-time/CPU/RSS enforcement", "single-thread numerical libraries")
+    isolation = c("non-executable typed remote contract", "per-tenant filesystem namespace",
+                  "process-tree wall-time/CPU/RSS enforcement", "single-thread numerical libraries",
+                  "external OS sandbox required for production")
   )
 }

@@ -10,7 +10,9 @@ ls_user_update(
   enabled = NULL,
   limits = NULL,
   first_name = NULL,
-  last_name = NULL
+  last_name = NULL,
+  scopes = NULL,
+  expires = NULL
 )
 }
 \arguments{
@@ -24,6 +26,8 @@ ls_user_update(
 
 \item{first_name, last_name}{Optional human-readable names. Pass an empty
 string to clear a value and `NULL` to leave it unchanged.}
+
+\item{scopes, expires}{Optional token permissions and expiry.}
 }
 \description{
 Update server-user status and resource limits

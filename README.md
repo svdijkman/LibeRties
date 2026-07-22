@@ -24,14 +24,23 @@ LibeRation creates and restores this persistent queue automatically when
 library(LibeRties)
 
 root <- "D:/liberties-data"
-user <- ls_user_create(root, "alice", first_name = "Alice")
+user <- ls_user_create(
+  root, "alice", first_name = "Alice",
+  scopes = c("jobs:read", "jobs:write"),
+  expires = Sys.time() + 90 * 24 * 3600
+)
 # Store user$token securely; it is returned only when created or rotated.
-ls_run_api(root, host = "127.0.0.1", port = 8000L)
+Sys.setenv(LIBERTIES_STORAGE_KEY = ls_generate_storage_key())
+ls_server_preflight(root, "127.0.0.1")
+ls_run_api(root, host = "127.0.0.1", port = 8000L, production = FALSE)
 ```
 
 Bind the R service to a private or loopback interface and terminate TLS at a
 maintained reverse proxy for remote deployment. Production hosting should add
 OS-account or container isolation around the restricted worker processes.
+The subprocess is not a hostile-code sandbox. For non-loopback deployment,
+`ls_run_api(..., production = TRUE)` performs a fail-closed preflight for the
+declared TLS, storage-encryption, and OS-isolation boundary.
 
 The administration interface is launched with `ls_run_admin()`. Persistent
 users and job history are read from `LIBERTIES_ROOT` or

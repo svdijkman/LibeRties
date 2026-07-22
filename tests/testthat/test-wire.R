@@ -13,6 +13,7 @@ test_that("JSON wire jobs rebuild models rather than trusting expression IR", {
   encoded <- ls_job_encode(job)
   expect_false(grepl("pred_ir", encoded, fixed = TRUE))
   rebuilt <- ls_job_decode(encoded)
+  expect_identical(ls_job_to_wire(job)$version, 2L)
   expect_s3_class(rebuilt$model, "nm_model")
   expect_s3_class(rebuilt$model$pred_ir, "libertad_ir")
   expect_identical(rebuilt$data$ID, data$ID)
@@ -21,6 +22,29 @@ test_that("JSON wire jobs rebuild models rather than trusting expression IR", {
     LibeRation::nm_simulate(rebuilt$model, rebuilt$data)$IPRED,
     LibeRation::nm_simulate(model, data)$IPRED
   )
+})
+
+test_that("wire v2 retains first-class advanced model semantics", {
+  skip_if_not_installed("LibeRation", minimum_version = "0.8.0")
+  model <- LibeRation::nm_model(
+    INPUT = c("ID", "TIME", "DV", "MDV", "DVID"), ADVAN = 1,
+    PRED = "CL=1;V=1;S1=V;F=0",
+    ERROR = paste(
+      "I1=0.6", "I2=0.4", "T11=0.8", "T12=0.2", "T21=0.3", "T22=0.7",
+      "E1=ifelse(DV==0,0.9,0.1)", "E2=ifelse(DV==0,0.2,0.8)", sep = "\n"
+    ),
+    THETAS = data.frame(THETA = 1, Value = 1, FIX = TRUE),
+    HMM_CONFIG = LibeRation::nm_hmm_config(
+      states = c("low", "high"), initial = c("I1", "I2"),
+      transition = matrix(c("T11", "T12", "T21", "T22"), 2, byrow = TRUE),
+      emission = c("E1", "E2"), by_dvid = FALSE
+    )
+  )
+  data <- data.frame(ID = 1, TIME = 0:1, DV = c(0, 1), MDV = 0L, DVID = 1L)
+  rebuilt <- ls_job_decode(ls_job_encode(ls_job("estimate", model, data)))
+  expect_s3_class(rebuilt$model$HMM_CONFIG, "nm_hmm_config")
+  expect_equal(rebuilt$model$HMM_CONFIG$transition, model$HMM_CONFIG$transition)
+  expect_identical(rebuilt$model$HMM_CONFIG$states, c("low", "high"))
 })
 
 test_that("wire transport preserves sequential estimation stages and outputs", {
@@ -115,6 +139,17 @@ test_that("result wire retains supported result metadata", {
   expect_s3_class(decoded, "data.frame")
   expect_equal(attr(decoded, "solver"), "advan")
   expect_equal(attr(decoded, "state_names"), "CENTRAL")
+})
+
+test_that("LibeRality results round-trip through the result contract", {
+  skip_if_not_installed("LibeRality", minimum_version = "0.2.0")
+  evaluated <- LibeRality::lity_evaluate(
+    LibeRality::lity_example()$design, LibeRality::lity_criterion_D()
+  )
+  decoded <- ls_result_decode(ls_result_encode(evaluated))
+  expect_s3_class(decoded, "lity_evaluation")
+  expect_s3_class(decoded$design, "lity_design")
+  expect_true(all(vapply(decoded$design$arms, inherits, logical(1), "lity_arm")))
 })
 
 test_that("remote fitted results rebuild nested model and dataset classes", {

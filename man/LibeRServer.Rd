@@ -62,13 +62,14 @@ namespace from the bearer token; callers cannot nominate another tenant.
   Authenticate a bearer token without exposing credential material.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
-    \preformatted{LibeRServer$authenticate(token)}
+    \preformatted{LibeRServer$authenticate(token, scope = NULL)}
     \if{html}{\out{</div>}}
   }
   \subsection{Arguments}{
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{token}}{Bearer token issued by [ls_user_create()].}
+      \item{\code{scope}}{Optional required API permission.}
     }
     \if{html}{\out{</div>}}
   }

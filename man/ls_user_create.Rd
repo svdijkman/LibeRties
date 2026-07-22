@@ -10,7 +10,9 @@ ls_user_create(
   limits = list(),
   enabled = TRUE,
   first_name = "",
-  last_name = ""
+  last_name = "",
+  scopes = c("jobs:read", "jobs:write"),
+  expires = NULL
 )
 }
 \arguments{
@@ -24,6 +26,11 @@ ls_user_create(
 
 \item{first_name, last_name}{Optional human-readable user names used by the
 administration interface. Authentication continues to use `username`.}
+
+\item{scopes}{API permissions assigned to the token.}
+
+\item{expires}{Optional future expiry date-time. `NULL` creates a non-expiring
+research token; production preflight reports it.}
 }
 \value{
 User metadata plus the one-time token.

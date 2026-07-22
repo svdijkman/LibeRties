@@ -76,6 +76,34 @@
   value
 }
 
+.ls_scopes <- function(scopes = c("jobs:read", "jobs:write")) {
+  allowed <- c("jobs:read", "jobs:write")
+  scopes <- unique(trimws(as.character(scopes)))
+  if (!length(scopes) || anyNA(scopes) || length(setdiff(scopes, allowed))) {
+    .ls_stop("`scopes` must contain jobs:read and/or jobs:write.")
+  }
+  scopes
+}
+
+.ls_parse_time <- function(value) {
+  if (inherits(value, "POSIXt")) return(as.POSIXct(value, tz = "UTC"))
+  text <- as.character(value)
+  parsed <- suppressWarnings(as.POSIXct(
+    text, format = "%Y-%m-%dT%H:%M:%OSZ", tz = "UTC"
+  ))
+  if (is.na(parsed)) parsed <- suppressWarnings(as.POSIXct(text, tz = "UTC"))
+  parsed
+}
+
+.ls_expiry <- function(expires = NULL) {
+  if (is.null(expires) || identical(expires, "")) return("")
+  value <- .ls_parse_time(expires)
+  if (length(value) != 1L || is.na(value) || value <= Sys.time()) {
+    .ls_stop("`expires` must be a future date-time or NULL.")
+  }
+  format(value, "%Y-%m-%dT%H:%M:%OSZ", tz = "UTC")
+}
+
 .ls_token_hash <- function(token) {
   token <- as.character(token)
   if (length(token) != 1L || is.na(token)) return("")
@@ -93,7 +121,7 @@
   identical(difference, 0L)
 }
 
-.ls_authorize <- function(root, token) {
+.ls_authorize <- function(root, token, scope = NULL) {
   supplied <- .ls_token_hash(token)
   if (!nzchar(supplied)) .ls_stop("Unauthorized: missing API token.")
   users <- .ls_registry_load(root)
@@ -104,7 +132,17 @@
   if (is.null(match)) .ls_stop("Unauthorized: invalid API token.")
   user <- users[[match]]
   if (!isTRUE(user$enabled)) .ls_stop("Unauthorized: user account is disabled.")
-  list(username = match, limits = .ls_limits(user$limits %||% list()), created = user$created)
+  expires <- as.character(user$expires %||% "")
+  expiry_time <- if (nzchar(expires)) .ls_parse_time(expires) else as.POSIXct(NA)
+  if (nzchar(expires) && (is.na(expiry_time) || expiry_time <= Sys.time())) {
+    .ls_stop("Unauthorized: API token has expired.")
+  }
+  scopes <- .ls_scopes(user$scopes %||% c("jobs:read", "jobs:write"))
+  if (!is.null(scope) && !scope %in% scopes) {
+    .ls_stop("Unauthorized: token scope is insufficient.")
+  }
+  list(username = match, limits = .ls_limits(user$limits %||% list()),
+       created = user$created, scopes = scopes, expires = expires)
 }
 
 #' Create a server user and one-time bearer token
@@ -118,29 +156,40 @@
 #' @param enabled Whether the account may authenticate.
 #' @param first_name,last_name Optional human-readable user names used by the
 #'   administration interface. Authentication continues to use `username`.
+#' @param scopes API permissions assigned to the token.
+#' @param expires Optional future expiry date-time. `NULL` creates a non-expiring
+#'   research token; production preflight reports it.
 #' @return User metadata plus the one-time token.
 #' @export
 ls_user_create <- function(root, username, limits = list(), enabled = TRUE,
-                           first_name = "", last_name = "") {
+                           first_name = "", last_name = "",
+                           scopes = c("jobs:read", "jobs:write"), expires = NULL) {
   root <- .ls_ensure_dir(root)
   username <- .ls_safe_component(username, "user id")
   limits <- .ls_limits(limits)
   first_name <- .ls_person_name(first_name, "first_name")
   last_name <- .ls_person_name(last_name, "last_name")
-  .ls_with_registry_lock(root, function() {
+  scopes <- .ls_scopes(scopes)
+  expires <- .ls_expiry(expires)
+  created <- .ls_with_registry_lock(root, function() {
     users <- .ls_registry_load(root)
     if (!is.null(users[[username]])) .ls_stop("User already exists: ", username, ".")
     token <- .ls_token()
     users[[username]] <- list(
       token_hash = .ls_token_hash(token), enabled = isTRUE(enabled),
       first_name = first_name, last_name = last_name,
+      scopes = scopes, expires = expires,
       limits = limits, created = .ls_now(), token_rotated = .ls_now()
     )
     .ls_registry_save(root, users)
     .ls_ensure_dir(file.path(root, "users", username, "jobs"))
     list(username = username, token = token, enabled = isTRUE(enabled),
-         first_name = first_name, last_name = last_name, limits = limits)
+         first_name = first_name, last_name = last_name, scopes = scopes,
+         expires = expires, limits = limits)
   })
+  .ls_audit_append(root, "user_created", username,
+                   list(scopes = scopes, expires = expires, enabled = isTRUE(enabled)))
+  created
 }
 
 #' List server users without credential material
@@ -151,7 +200,7 @@ ls_user_list <- function(root) {
   if (!length(users)) {
     return(data.frame(
       username = character(), first_name = character(), last_name = character(),
-      enabled = logical(), created = character(),
+      enabled = logical(), created = character(), scopes = character(), expires = character(),
       max_concurrent_jobs = integer(), max_queued_jobs = integer(),
       max_payload_mb = numeric(), max_result_mb = numeric(), max_storage_mb = numeric(),
       max_runtime_seconds = numeric(), max_cpu_seconds = numeric(),
@@ -167,6 +216,9 @@ ls_user_list <- function(root) {
       last_name = as.character(users[[username]]$last_name %||% ""),
       enabled = isTRUE(users[[username]]$enabled),
       created = users[[username]]$created,
+      scopes = paste(.ls_scopes(users[[username]]$scopes %||%
+                                c("jobs:read", "jobs:write")), collapse = ","),
+      expires = as.character(users[[username]]$expires %||% ""),
       max_concurrent_jobs = limits$max_concurrent_jobs,
       max_queued_jobs = limits$max_queued_jobs,
       max_payload_mb = limits$max_payload_mb,
@@ -183,20 +235,26 @@ ls_user_list <- function(root) {
 #' Rotate a server user's bearer token
 #' @param root LibeRties server storage root.
 #' @param username Tenant identifier.
+#' @param expires Optional replacement expiry date-time; `NULL` retains the
+#'   current expiry.
 #' @return New one-time bearer token.
 #' @export
-ls_user_rotate_token <- function(root, username) {
+ls_user_rotate_token <- function(root, username, expires = NULL) {
   root <- .ls_ensure_dir(root)
   username <- .ls_safe_component(username, "user id")
-  .ls_with_registry_lock(root, function() {
+  token <- .ls_with_registry_lock(root, function() {
     users <- .ls_registry_load(root)
     if (is.null(users[[username]])) .ls_stop("Unknown user: ", username, ".")
     token <- .ls_token()
     users[[username]]$token_hash <- .ls_token_hash(token)
     users[[username]]$token_rotated <- .ls_now()
+    if (!is.null(expires)) users[[username]]$expires <- .ls_expiry(expires)
     .ls_registry_save(root, users)
     token
   })
+  .ls_audit_append(root, "token_rotated", username,
+                   list(expires = as.character(expires %||% "unchanged")))
+  token
 }
 
 #' Update server-user status and resource limits
@@ -206,9 +264,11 @@ ls_user_rotate_token <- function(root, username) {
 #' @param limits Optional named limit overrides.
 #' @param first_name,last_name Optional human-readable names. Pass an empty
 #'   string to clear a value and `NULL` to leave it unchanged.
+#' @param scopes,expires Optional token permissions and expiry.
 #' @export
 ls_user_update <- function(root, username, enabled = NULL, limits = NULL,
-                           first_name = NULL, last_name = NULL) {
+                           first_name = NULL, last_name = NULL,
+                           scopes = NULL, expires = NULL) {
   root <- .ls_ensure_dir(root)
   username <- .ls_safe_component(username, "user id")
   .ls_with_registry_lock(root, function() {
@@ -219,10 +279,15 @@ ls_user_update <- function(root, username, enabled = NULL, limits = NULL,
     if (!is.null(limits)) user$limits <- .ls_limits(limits, .ls_limits(user$limits))
     if (!is.null(first_name)) user$first_name <- .ls_person_name(first_name, "first_name")
     if (!is.null(last_name)) user$last_name <- .ls_person_name(last_name, "last_name")
+    if (!is.null(scopes)) user$scopes <- .ls_scopes(scopes)
+    if (!is.null(expires)) user$expires <- .ls_expiry(expires)
     users[[username]] <- user
     .ls_registry_save(root, users)
     invisible(TRUE)
   })
+  .ls_audit_append(root, "user_updated", username,
+                   list(enabled = enabled, scopes = scopes, expires = expires))
+  invisible(TRUE)
 }
 
 #' Delete a server user
@@ -238,7 +303,7 @@ ls_user_update <- function(root, username, enabled = NULL, limits = NULL,
 ls_user_delete <- function(root, username, remove_jobs = FALSE) {
   root <- .ls_ensure_dir(root)
   username <- .ls_safe_component(username, "user id")
-  .ls_with_registry_lock(root, function() {
+  deleted <- .ls_with_registry_lock(root, function() {
     users <- .ls_registry_load(root)
     if (is.null(users[[username]])) .ls_stop("Unknown user: ", username, ".")
     limits <- .ls_limits(users[[username]]$limits %||% list())
@@ -262,6 +327,8 @@ ls_user_delete <- function(root, username, remove_jobs = FALSE) {
     .ls_registry_save(root, users)
     invisible(TRUE)
   })
+  .ls_audit_append(root, "user_deleted", username, list(remove_jobs = isTRUE(remove_jobs)))
+  deleted
 }
 
 .ls_storage_bytes <- function(root, username) {
@@ -307,8 +374,9 @@ LibeRServer <- R6::R6Class(
     #' @description
     #' Authenticate a bearer token without exposing credential material.
     #' @param token Bearer token issued by [ls_user_create()].
+    #' @param scope Optional required API permission.
     #' @return User metadata and effective limits.
-    authenticate = function(token) .ls_authorize(self$root, token),
+    authenticate = function(token, scope = NULL) .ls_authorize(self$root, token, scope),
 
     #' @description
     #' Submit a job to the authenticated user's isolated queue.
@@ -317,7 +385,7 @@ LibeRServer <- R6::R6Class(
     #' @param start Start available work immediately.
     #' @return The durable job identifier, invisibly.
     submit = function(token, job, start = TRUE) {
-      auth <- self$authenticate(token)
+      auth <- self$authenticate(token, "jobs:write")
       if (!inherits(job, "liber_job")) .ls_stop("`job` must be created by ls_job().")
       payload_bytes <- length(serialize(job, NULL, version = 3))
       if (payload_bytes > auth$limits$max_payload_mb * 1024^2) {
@@ -332,7 +400,10 @@ LibeRServer <- R6::R6Class(
           auth$limits$max_storage_mb * 1024^2) {
         .ls_stop("Storage quota reached for user ", auth$username, ".")
       }
-      queue$submit(job, start = start)
+      id <- queue$submit(job, start = start)
+      .ls_audit_append(self$root, "job_submitted", auth$username,
+                       list(id = id, type = job$type))
+      id
     },
 
     #' @description
@@ -341,7 +412,7 @@ LibeRServer <- R6::R6Class(
     #' @param start Start available work immediately.
     #' @return The current job table, invisibly.
     poll = function(token, start = TRUE) {
-      auth <- self$authenticate(token)
+      auth <- self$authenticate(token, "jobs:read")
       private$queue_for(auth)$poll(start = start)
     },
 
@@ -350,7 +421,7 @@ LibeRServer <- R6::R6Class(
     #' @param token Bearer token issued by [ls_user_create()].
     #' @return A data frame of durable jobs.
     list = function(token) {
-      auth <- self$authenticate(token)
+      auth <- self$authenticate(token, "jobs:read")
       private$queue_for(auth)$list()
     },
 
@@ -360,7 +431,7 @@ LibeRServer <- R6::R6Class(
     #' @param id Durable job identifier.
     #' @return A named metadata list.
     status = function(token, id) {
-      auth <- self$authenticate(token)
+      auth <- self$authenticate(token, "jobs:read")
       private$queue_for(auth)$status(id)
     },
 
@@ -370,7 +441,7 @@ LibeRServer <- R6::R6Class(
     #' @param id Durable job identifier.
     #' @return The deserialized result object.
     result = function(token, id) {
-      auth <- self$authenticate(token)
+      auth <- self$authenticate(token, "jobs:read")
       result <- private$queue_for(auth)$result(id)
       bytes <- length(serialize(result, NULL, version = 3))
       if (bytes > auth$limits$max_result_mb * 1024^2) {
@@ -386,7 +457,7 @@ LibeRServer <- R6::R6Class(
     #' @param stream Standard-output or standard-error stream.
     #' @return A character vector containing log lines.
     logs = function(token, id, stream = c("stdout", "stderr")) {
-      auth <- self$authenticate(token)
+      auth <- self$authenticate(token, "jobs:read")
       private$queue_for(auth)$logs(id, stream = match.arg(stream))
     },
 
@@ -397,8 +468,12 @@ LibeRServer <- R6::R6Class(
     #' @return `TRUE` when cancellation changed the job state and `FALSE` when
     #'   the job was already terminal, invisibly.
     cancel = function(token, id) {
-      auth <- self$authenticate(token)
-      private$queue_for(auth)$cancel(id)
+      auth <- self$authenticate(token, "jobs:write")
+      cancelled <- private$queue_for(auth)$cancel(id)
+      if (isTRUE(cancelled)) {
+        .ls_audit_append(self$root, "job_cancelled", auth$username, list(id = id))
+      }
+      cancelled
     }
   ),
   private = list(

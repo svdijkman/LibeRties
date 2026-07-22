@@ -4,12 +4,15 @@
 \alias{ls_user_rotate_token}
 \title{Rotate a server user's bearer token}
 \usage{
-ls_user_rotate_token(root, username)
+ls_user_rotate_token(root, username, expires = NULL)
 }
 \arguments{
 \item{root}{LibeRties server storage root.}
 
 \item{username}{Tenant identifier.}
+
+\item{expires}{Optional replacement expiry date-time; `NULL` retains the
+current expiry.}
 }
 \value{
 New one-time bearer token.

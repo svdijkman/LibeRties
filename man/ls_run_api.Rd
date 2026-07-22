@@ -9,7 +9,10 @@ ls_run_api(
   host = "127.0.0.1",
   port = 8000L,
   max_workers_per_user = 2L,
-  quiet = FALSE
+  quiet = FALSE,
+  production = !.ls_loopback(host),
+  behind_tls_proxy = FALSE,
+  policy = ls_security_policy(production = production)
 )
 }
 \arguments{
@@ -22,6 +25,14 @@ ls_run_api(
 \item{max_workers_per_user}{Host-level per-user worker ceiling.}
 
 \item{quiet}{Suppress Plumber startup messages.}
+
+\item{production}{Enforce production preflight. Defaults to `TRUE` for a
+non-loopback host.}
+
+\item{behind_tls_proxy}{Confirm that HTTPS is terminated by a maintained
+reverse proxy.}
+
+\item{policy}{Optional security policy.}
 }
 \description{
 Bind to loopback by default and place a TLS reverse proxy in front of this

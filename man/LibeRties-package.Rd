@@ -6,7 +6,7 @@
 \alias{LibeRties-package}
 \title{LibeRties: portable execution for LibeR jobs}
 \description{
-Executes serialized LibeR simulation and estimation jobs in isolated per-user sandboxes. A persistent cross-platform local queue uses background R worker processes and the same versioned job contract intended for remote Linux servers. Payload checksums, explicit state transitions, metadata locking, safe path components, cancellation, logs, restart recovery, per-tenant quotas, monitored resource limits, and result provenance are built into the contract.
+Executes serialized LibeR simulation and estimation jobs in restricted subprocesses with isolated per-user working directories. A persistent cross-platform local queue uses background R worker processes and the same versioned job contract intended for remote Linux servers. Payload checksums, explicit state transitions, metadata locking, safe path components, cancellation, logs, restart recovery, per-tenant quotas, monitored resource limits, and result provenance are built into the contract. Production deployments require an external operating-system isolation layer and TLS termination.
 }
 \author{
 \strong{Maintainer}: Sven C. van Dijkman \email{svdijkman@users.noreply.github.com}

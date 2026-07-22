@@ -35,7 +35,7 @@ LibeRQueue <- R6::R6Class(
       self$max_workers <- as.integer(max_workers)
       self$limits <- .ls_limits(limits)
       self$max_workers <- min(self$max_workers, self$limits$max_concurrent_jobs)
-      self$isolation <- "restricted-process"
+      self$isolation <- "restricted-subprocess"
       if (length(self$max_workers) != 1L || is.na(self$max_workers) || self$max_workers < 1L) {
         .ls_stop("`max_workers` must be a positive integer.")
       }
@@ -72,7 +72,7 @@ LibeRQueue <- R6::R6Class(
       payload <- .ls_payload_path(job_dir)
       .ls_atomic_save_rds(job, payload)
       metadata <- list(
-        schema = "liber.queue.metadata", version = 1L, id = id, user = user,
+        schema = "liber.queue.metadata", version = 2L, id = id, user = user,
         type = job$type, label = job$label, status = "queued",
         submitted = .ls_now(), started = "", finished = "", updated = .ls_now(),
         pid = NA_integer_, pid_started = NA_real_, error = "", payload_md5 = .ls_md5(payload),
@@ -177,7 +177,13 @@ LibeRQueue <- R6::R6Class(
       key <- paste(user, id, sep = "::")
       if (exists(key, envir = self$processes, inherits = FALSE)) {
         process <- get(key, envir = self$processes, inherits = FALSE)
-        if (isTRUE(process$is_alive())) process$kill()
+        if (isTRUE(process$is_alive())) {
+          .ls_kill_process_tree(process$get_pid())
+          try(process$kill(), silent = TRUE)
+        }
+      } else {
+        pid <- suppressWarnings(as.integer(metadata$pid %||% NA_integer_))
+        if (!is.na(pid) && pid > 0L) .ls_kill_process_tree(pid)
       }
       .ls_update_meta(job_dir, list(
         status = "cancelled", finished = .ls_now(), error = "Cancelled by user."
@@ -248,7 +254,8 @@ LibeRQueue <- R6::R6Class(
           reason <- paste0("memory limit exceeded (", limits$max_memory_mb, " MB)")
         }
         if (nzchar(reason)) {
-          process$kill()
+          .ls_kill_process_tree(process$get_pid())
+          try(process$kill(), silent = TRUE)
           .ls_update_meta(job_dir, list(
             status = "failed", finished = .ls_now(),
             error = paste("Resource limit exceeded:", reason),
@@ -310,7 +317,7 @@ LibeRQueue <- R6::R6Class(
           reason <- paste0("memory limit exceeded (", limits$max_memory_mb, " MB)")
         }
         if (nzchar(reason)) {
-          try(ps::ps_kill(ps::ps_handle(pid)), silent = TRUE)
+          .ls_kill_process_tree(pid)
           .ls_update_meta(job_dir, list(
             status = "failed", finished = .ls_now(),
             error = paste("Resource limit exceeded after queue recovery:", reason),
