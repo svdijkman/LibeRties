@@ -156,17 +156,28 @@
 .ls_read_rds <- function(path, attempts = 4L) {
   last <- NULL
   for (i in seq_len(attempts)) {
-    candidate <- if (file.exists(path)) path else if (file.exists(paste0(path, ".previous"))) {
-      paste0(path, ".previous")
-    } else path
-    value <- tryCatch(.ls_storage_unwrap(suppressWarnings(readRDS(candidate))), error = function(e) {
-      last <<- e
-      NULL
-    })
-    if (!is.null(value)) return(value)
+    candidates <- c(path, paste0(path, ".previous"))
+    candidates <- unique(candidates[file.exists(candidates)])
+    for (candidate in candidates) {
+      value <- tryCatch(
+        .ls_storage_unwrap(suppressWarnings(readRDS(candidate))),
+        error = function(error) {
+          last <<- error
+          NULL
+        }
+      )
+      if (!is.null(value)) {
+        if (!identical(candidate, path)) {
+          warning("Recovered interrupted durable write from ", basename(candidate), ".",
+                  call. = FALSE)
+        }
+        return(value)
+      }
+    }
     if (i < attempts) Sys.sleep(0.01)
   }
-  .ls_stop("Unable to read ", path, ": ", conditionMessage(last))
+  detail <- if (inherits(last, "condition")) conditionMessage(last) else "file is absent"
+  .ls_stop("Unable to read ", path, ": ", detail)
 }
 
 .ls_meta_path <- function(job_dir) file.path(job_dir, "metadata.rds")

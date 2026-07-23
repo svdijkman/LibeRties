@@ -1,3 +1,11 @@
+# LibeRties 0.7.3
+
+- Recovers durable queue and server records from their previous atomic-write
+  generation when the primary RDS is interrupted or corrupt.
+- Joins the LibeR 0.9 research-beta evidence matrix with explicit boundaries
+  between built-in process controls and deployment-provided hostile-code
+  isolation.
+
 # LibeRties 0.7.2
 
 - Restores the established high-resolution LibeR dove and aligns cards,

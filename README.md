@@ -6,6 +6,11 @@ background R workers, per-tenant namespaces, authenticated HTTP access,
 restart recovery, quotas, resource limits, integrity checks, cancellation,
 logs, and result provenance.
 
+LibeRties is distributed as part of the LibeR 0.9 research beta. Use the
+[ecosystem installer](../docs/INSTALL.md) for a compatible package set and
+review `LibeRation::liber_support_matrix("LibeRties")`, especially the
+deployment-owned isolation boundary, before operating a remote service.
+
 ## Local queue
 
 ```r

@@ -56,3 +56,23 @@ test_that("durable queue recovers a dead untracked worker after restart", {
   expect_equal(restarted$status(id)$status, "failed")
   expect_match(restarted$status(id)$error, "durable-queue recovery")
 })
+
+test_that("durable records recover the previous generation after an interrupted write", {
+  root <- tempfile("queue-interrupted-")
+  queue <- ls_local_queue(root, max_workers = 1)
+  job <- ls_job("simulate", model = list(version = 1L),
+                data = data.frame(ID = 1, TIME = 0))
+  id <- queue$submit(job, start = FALSE)
+  job_dir <- LibeRties:::.ls_job_dir(root, "local", id)
+  metadata <- LibeRties:::.ls_meta_path(job_dir)
+  backup <- paste0(metadata, ".previous")
+  expect_true(file.copy(metadata, backup))
+  writeBin(charToRaw("interrupted"), metadata)
+
+  expect_warning(
+    recovered <- LibeRties:::.ls_read_meta(job_dir),
+    "Recovered interrupted durable write"
+  )
+  expect_equal(recovered$id, id)
+  expect_equal(recovered$status, "queued")
+})

@@ -1,10 +1,9 @@
 citHeader("To cite LibeRties in publications, use:")
 
-citEntry(
-  entry = "Manual",
+bibentry(
+  bibtype = "Manual",
   title = "LibeRties: Portable Job Execution for LibeR",
   author = person("Sven C.", "van Dijkman"),
   year = "2026",
-  note = "R package version 0.7.1",
-  textVersion = "van Dijkman SC (2026). LibeRties: Portable Job Execution for LibeR. R package version 0.7.1."
+  note = paste("R package version", meta$Version)
 )
