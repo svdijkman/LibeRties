@@ -75,4 +75,15 @@ test_that("durable records recover the previous generation after an interrupted 
   )
   expect_equal(recovered$id, id)
   expect_equal(recovered$status, "queued")
+
+  # During an atomic rotation on Windows the primary pathname can briefly be
+  # absent while the previous generation is already durable. Public status
+  # reads must follow the same recovery path instead of reporting an unknown
+  # job.
+  unlink(metadata)
+  expect_warning(
+    recovered_during_rotation <- queue$status(id),
+    "Recovered interrupted durable write"
+  )
+  expect_equal(recovered_during_rotation$id, id)
 })

@@ -107,8 +107,17 @@ LibeRQueue <- R6::R6Class(
     #' @return A named metadata list.
     status = function(id, user = self$user) {
       job_dir <- .ls_job_dir(self$root, user, id)
-      if (!file.exists(.ls_meta_path(job_dir))) .ls_stop("Unknown job id.")
-      .ls_read_meta(job_dir)
+      if (!dir.exists(job_dir)) .ls_stop("Unknown job id.")
+      tryCatch(
+        .ls_read_meta(job_dir),
+        error = function(error) {
+          primary <- .ls_meta_path(job_dir)
+          if (!file.exists(primary) && !file.exists(paste0(primary, ".previous"))) {
+            .ls_stop("Unknown job id.")
+          }
+          stop(error)
+        }
+      )
     },
 
     #' @description

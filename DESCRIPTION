@@ -1,7 +1,7 @@
 Package: LibeRties
 Type: Package
 Title: Portable Job Execution for LibeR
-Version: 0.7.3
+Version: 0.7.4
 Authors@R: person("Sven C.", "van Dijkman",
     email = "svdijkman@users.noreply.github.com", role = c("aut", "cre"))
 Author: Sven C. van Dijkman [aut, cre]

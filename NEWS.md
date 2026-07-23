@@ -1,3 +1,9 @@
+# LibeRties 0.7.4
+
+- Makes queue status reads resilient to the brief Windows atomic-write
+  rotation window where `metadata.rds` has moved to its durable previous
+  generation, eliminating a rare `Unknown job id` race in active workers.
+
 # LibeRties 0.7.3
 
 - Recovers durable queue and server records from their previous atomic-write
