@@ -10,11 +10,10 @@ test_that("server administration app uses an independent protected login", {
   favicon_path <- system.file("admin-assets", "favicon.svg", package = "LibeRties")
   expect_true(file.exists(favicon_path))
   favicon <- paste(readLines(favicon_path, warn = FALSE), collapse = "\n")
-  expect_match(favicon, 'width="1000"', fixed = TRUE)
-  expect_match(favicon, 'id="liberties-red"', fixed = TRUE)
-  expect_match(favicon, 'href="data:image/png;base64,', fixed = TRUE)
-  expect_false(grepl("<filter", favicon, fixed = TRUE))
-  expect_false(grepl('<circle cx="16"', favicon, fixed = TRUE))
+  expect_lt(file.info(favicon_path)$size, 300000)
+  expect_match(favicon, 'id="liberties-dove"', fixed = TRUE)
+  expect_match(favicon, 'width="512"', fixed = TRUE)
+  expect_match(favicon, "data:image/png;base64,", fixed = TRUE)
 
   expect_no_error(shiny::testServer(app[["serverFuncSource"]](), {
     session$flushReact()

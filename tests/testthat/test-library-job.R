@@ -11,7 +11,7 @@ test_that("typed literature jobs round-trip without executable payloads", {
   expect_equal(decoded$type, job$type)
   expect_equal(decoded$data$metadata$pmid, "123")
   expect_equal(decoded$data$full_text, "Evidence")
-  expect_equal(ls_job_manifest(job)$requirements$LibeRary, ">= 0.7.2")
+  expect_equal(ls_job_manifest(job)$requirements$LibeRary, ">= 0.7.3")
   expect_error(ls_library_job("library_assess", list(metadata = list(), run = identity)),
                "data only")
 })

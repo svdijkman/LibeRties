@@ -16,7 +16,7 @@ test_that("optimal design is an advertised typed job", {
                 arguments = list(operation = "evaluate"))
   expect_equal(job$type, "optimal_design")
   expect_true("optimal_design" %in% ls_queue_capabilities()$job_types)
-  expect_equal(ls_job_manifest(job)$requirements$LibeRality, ">= 0.2.0")
+  expect_equal(ls_job_manifest(job)$requirements$LibeRality, ">= 0.2.1")
 })
 
 test_that("job ids use 128 bits of cryptographic randomness", {

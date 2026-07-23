@@ -99,12 +99,12 @@ ls_job_manifest <- function(job) {
     payload_sha256 = .ls_sha256(tmp),
     integrity = "sha256",
     requirements = if (startsWith(job$type, "library_")) {
-      list(LibeRary = ">= 0.7.2", LibeRties = ">= 0.7.0")
+      list(LibeRary = ">= 0.7.3", LibeRties = ">= 0.7.1")
     } else if (identical(job$type, "optimal_design")) {
-      list(LibeRality = ">= 0.2.0", LibeRation = ">= 0.8.0", LibeRtAD = ">= 0.7.5")
+      list(LibeRality = ">= 0.2.1", LibeRation = ">= 0.8.1", LibeRtAD = ">= 0.7.6")
     } else if (job$type %in% c("individualise", "regimen")) {
-      list(LibeRator = ">= 0.2.3", LibeRation = ">= 0.8.0", LibeRtAD = ">= 0.7.5")
-    } else list(LibeRation = ">= 0.8.0", LibeRtAD = ">= 0.7.5")
+      list(LibeRator = ">= 0.2.4", LibeRation = ">= 0.8.1", LibeRtAD = ">= 0.7.6")
+    } else list(LibeRation = ">= 0.8.1", LibeRtAD = ">= 0.7.6")
   )
 }
 

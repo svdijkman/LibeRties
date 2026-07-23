@@ -27,6 +27,75 @@
   unname(lapply(seq_len(nrow(jobs)), function(i) as.list(jobs[i, , drop = FALSE])))
 }
 
+.ls_request_header <- function(req, name) {
+  direct <- req[[paste0("HTTP_", toupper(gsub("-", "_", name, fixed = TRUE)))]]
+  if (!is.null(direct) && nzchar(as.character(direct))) return(as.character(direct))
+  headers <- req$headers %||% list()
+  hit <- which(tolower(names(headers) %||% character()) == tolower(name))
+  if (length(hit)) as.character(headers[[hit[[1L]]]]) else ""
+}
+
+.ls_request_address <- function(req, policy) {
+  peer <- .ls_clean_address(req$REMOTE_ADDR %||% "unknown")
+  if (!.ls_trusted_address(peer, policy$trusted_proxies %||% character())) return(peer)
+  forwarded <- .ls_request_header(req, "X-Forwarded-For")
+  if (!nzchar(forwarded)) return(peer)
+  chain <- trimws(strsplit(forwarded, ",", fixed = TRUE)[[1L]])
+  chain <- vapply(chain, .ls_clean_address, character(1))
+  chain <- chain[nzchar(chain)]
+  if (!length(chain)) return(peer)
+  for (address in rev(chain)) {
+    if (!.ls_trusted_address(address, policy$trusted_proxies)) return(address)
+  }
+  chain[[1L]]
+}
+
+.ls_rate_take <- function(state, key, bucket, limit, max_keys) {
+  previous <- attr(state, "bucket", exact = TRUE)
+  if (is.null(previous) || !identical(previous, bucket)) {
+    existing <- ls(state, all.names = TRUE)
+    if (length(existing)) rm(list = existing, envir = state)
+    attr(state, "bucket") <- bucket
+  }
+  effective_key <- key
+  if (!exists(effective_key, state, inherits = FALSE)) {
+    overflow_exists <- exists("__bounded_overflow__", state, inherits = FALSE)
+    if (overflow_exists || length(ls(state, all.names = TRUE)) >= max_keys - 1L) {
+      effective_key <- "__bounded_overflow__"
+    }
+  }
+  count <- if (exists(effective_key, state, inherits = FALSE)) {
+    get(effective_key, state, inherits = FALSE)
+  } else 0L
+  count <- as.integer(count) + 1L
+  assign(effective_key, count, state)
+  list(
+    count = count, allowed = count <= limit,
+    remaining = max(0L, limit - count), overflow = !identical(effective_key, key)
+  )
+}
+
+.ls_redact_logs <- function(lines, max_lines = 5000L, max_bytes = 1024^2) {
+  lines <- enc2utf8(as.character(lines))
+  lines <- gsub("(?i)(authorization[[:space:]]*[:=][[:space:]]*bearer)[[:space:]]+[^[:space:]]+",
+                "\\1 [REDACTED]", lines, perl = TRUE)
+  lines <- gsub("(?i)(bearer)[[:space:]]+[A-Za-z0-9._~+/-]{12,}",
+                "\\1 [REDACTED]", lines, perl = TRUE)
+  lines <- gsub("(?i)((api[_ -]?key|password|secret|token)[[:space:]]*[:=][[:space:]]*)[^,;[:space:]]+",
+                "\\1[REDACTED]", lines, perl = TRUE)
+  lines <- gsub("[A-Z0-9._%+-]+@[A-Z0-9.-]+[.][A-Z]{2,}", "[REDACTED-EMAIL]",
+                lines, ignore.case = TRUE, perl = TRUE)
+  truncated <- length(lines) > max_lines
+  lines <- utils::tail(lines, max_lines)
+  sizes <- nchar(lines, type = "bytes") + 1L
+  if (sum(sizes) > max_bytes) {
+    keep <- rev(cumsum(rev(sizes)) <= max_bytes)
+    lines <- lines[keep]
+    truncated <- TRUE
+  }
+  if (truncated) c("[Earlier log content omitted by response limits.]", lines) else lines
+}
+
 #' Build the authenticated LibeRties HTTP API
 #'
 #' The API accepts only the typed JSON wire contract. It does not expose an RDS
@@ -58,20 +127,21 @@ ls_api <- function(server = ls_server(), policy = ls_security_policy()) {
   })
   api <- plumber::pr_filter(api, "rate_limit", function(req, res) {
     credential <- tryCatch(.ls_bearer_token(req), error = function(error) "anonymous")
+    client <- .ls_request_address(req, policy)
     key <- if (identical(credential, "anonymous")) {
-      paste0("anonymous:", req$REMOTE_ADDR %||% "unknown")
+      paste0("anonymous:", client)
     } else paste0("token:", .ls_token_hash(credential))
     bucket <- floor(as.numeric(Sys.time()) / 60)
-    state <- if (exists(key, rate_state, inherits = FALSE)) get(key, rate_state) else
-      list(bucket = bucket, count = 0L)
-    if (!identical(state$bucket, bucket)) state <- list(bucket = bucket, count = 0L)
-    state$count <- state$count + 1L
-    assign(key, state, rate_state)
+    state <- .ls_rate_take(
+      rate_state, key, bucket, policy$requests_per_minute,
+      policy$max_rate_limit_keys
+    )
     res$setHeader("X-RateLimit-Limit", as.character(policy$requests_per_minute))
-    res$setHeader("X-RateLimit-Remaining",
-                  as.character(max(0L, policy$requests_per_minute - state$count)))
-    if (state$count > policy$requests_per_minute) {
+    res$setHeader("X-RateLimit-Remaining", as.character(state$remaining))
+    res$setHeader("X-RateLimit-Reset", as.character((bucket + 1) * 60))
+    if (!state$allowed) {
       res$status <- 429L
+      res$setHeader("Retry-After", as.character(max(1L, ceiling((bucket + 1) * 60 - as.numeric(Sys.time())))))
       return(list(error = "Request rate limit exceeded."))
     }
     plumber::forward()
@@ -105,7 +175,10 @@ ls_api <- function(server = ls_server(), policy = ls_security_policy()) {
   }, serializer = serializer)
   api <- plumber::pr_get(api, "/v1/jobs/<id>/logs", function(req, id,
                                                                stream = "stdout") {
-    list(lines = server$logs(.ls_bearer_token(req), id, stream = stream))
+    lines <- server$logs(.ls_bearer_token(req), id, stream = stream)
+    list(lines = .ls_redact_logs(
+      lines, max_lines = policy$max_log_lines, max_bytes = policy$max_log_bytes
+    ))
   }, serializer = serializer)
   api <- plumber::pr_delete(api, "/v1/jobs/<id>", function(req, id) {
     list(cancelled = server$cancel(.ls_bearer_token(req), id))
@@ -128,12 +201,18 @@ ls_api <- function(server = ls_server(), policy = ls_security_policy()) {
 #' @param behind_tls_proxy Confirm that HTTPS is terminated by a maintained
 #'   reverse proxy.
 #' @param policy Optional security policy.
+#' @param isolation_probe Deployment-integrated isolation verifier passed to
+#'   [ls_server_preflight()].
 #' @export
 ls_run_api <- function(root = .ls_default_root(), host = "127.0.0.1", port = 8000L,
                        max_workers_per_user = 2L, quiet = FALSE,
                        production = !.ls_loopback(host), behind_tls_proxy = FALSE,
-                       policy = ls_security_policy(production = production)) {
-  ls_server_preflight(root, host, behind_tls_proxy, policy, strict = isTRUE(production))
+                       policy = ls_security_policy(production = production),
+                       isolation_probe = NULL) {
+  ls_server_preflight(
+    root, host, behind_tls_proxy, policy, strict = isTRUE(production),
+    isolation_probe = isolation_probe
+  )
   api <- ls_api(ls_server(root, max_workers_per_user), policy = policy)
   api$run(host = host, port = as.integer(port), swagger = FALSE, quiet = quiet)
 }

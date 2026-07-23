@@ -40,7 +40,13 @@ maintained reverse proxy for remote deployment. Production hosting should add
 OS-account or container isolation around the restricted worker processes.
 The subprocess is not a hostile-code sandbox. For non-loopback deployment,
 `ls_run_api(..., production = TRUE)` performs a fail-closed preflight for the
-declared TLS, storage-encryption, and OS-isolation boundary.
+declared TLS and storage-encryption boundary and requires verifiable
+OS-isolation evidence. A `LIBERTIES_OS_ISOLATION` label alone is not proof:
+connect `isolation_probe` to the actual service manager/container boundary (or
+use the built-in Linux container/cgroup detection). Configure `trusted_proxies`
+explicitly before forwarded client addresses are accepted. Rate-limit state is
+memory bounded, remote logs are size-limited and secret-redacted, and terminal
+logs are authenticated-encrypted when a storage key is configured.
 
 The administration interface is launched with `ls_run_admin()`. Persistent
 users and job history are read from `LIBERTIES_ROOT` or

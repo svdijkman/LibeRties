@@ -172,6 +172,42 @@
 .ls_meta_path <- function(job_dir) file.path(job_dir, "metadata.rds")
 .ls_payload_path <- function(job_dir) file.path(job_dir, "payload.rds")
 .ls_result_path <- function(job_dir) file.path(job_dir, "result.rds")
+.ls_log_path <- function(job_dir, stream) file.path(job_dir, paste0(stream, ".log"))
+.ls_log_archive_path <- function(job_dir, stream) file.path(job_dir, paste0(stream, ".log.rds"))
+
+.ls_seal_job_logs <- function(job_dir) {
+  if (is.null(.ls_storage_key())) return(invisible(FALSE))
+  changed <- FALSE
+  for (stream in c("stdout", "stderr")) {
+    path <- .ls_log_path(job_dir, stream)
+    archive <- .ls_log_archive_path(job_dir, stream)
+    if (!file.exists(path)) next
+    lines <- readLines(path, warn = FALSE, encoding = "UTF-8")
+    .ls_atomic_save_rds(lines, archive)
+    verified <- .ls_read_rds(archive)
+    if (!identical(as.character(verified), as.character(lines))) {
+      .ls_stop("Unable to verify encrypted ", stream, " log archive.")
+    }
+    unlink(path, force = TRUE)
+    changed <- TRUE
+  }
+  error_path <- file.path(job_dir, "error.txt")
+  if (file.exists(error_path)) {
+    error <- readLines(error_path, warn = FALSE, encoding = "UTF-8")
+    .ls_atomic_save_rds(error, file.path(job_dir, "error.txt.rds"))
+    unlink(error_path, force = TRUE)
+    changed <- TRUE
+  }
+  invisible(changed)
+}
+
+.ls_read_job_log <- function(job_dir, stream) {
+  archive <- .ls_log_archive_path(job_dir, stream)
+  if (file.exists(archive)) return(as.character(.ls_read_rds(archive)))
+  path <- .ls_log_path(job_dir, stream)
+  if (!file.exists(path)) return(character())
+  readLines(path, warn = FALSE, encoding = "UTF-8")
+}
 
 .ls_read_meta <- function(job_dir) .ls_read_rds(.ls_meta_path(job_dir))
 .ls_write_meta <- function(job_dir, metadata) {

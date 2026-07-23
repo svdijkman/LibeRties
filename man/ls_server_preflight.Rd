@@ -9,7 +9,8 @@ ls_server_preflight(
   host = "127.0.0.1",
   behind_tls_proxy = FALSE,
   policy = ls_security_policy(production = !.ls_loopback(host)),
-  strict = FALSE
+  strict = FALSE,
+  isolation_probe = NULL
 )
 }
 \arguments{
@@ -23,6 +24,11 @@ HTTPS before traffic reaches LibeRties.}
 \item{policy}{A [ls_security_policy()] object.}
 
 \item{strict}{Throw an error for unmet requirements.}
+
+\item{isolation_probe}{Optional deployment-integrated function returning a
+list with logical `active`, `provider`, and `evidence`. When omitted,
+LibeRties checks Linux container/cgroup evidence. This should be connected
+to the actual service manager or sandbox on other platforms.}
 }
 \value{
 A `liberties_security_preflight` report.

@@ -76,6 +76,11 @@ reverse proxy is not technically required, but it is the recommended way to
 provide TLS, request limits, hardened timeouts, access logging, and certificate
 renewal.
 
+Only proxies listed in `ls_security_policy(trusted_proxies = ...)` may supply a
+forwarded client address. Production preflight also requires a real isolation
+probe (or detected Linux container/cgroup evidence); an environment label is
+not accepted as proof of a sandbox.
+
 For example, expose `https://liberties.example.org` through a maintained proxy
 and forward only to `127.0.0.1:8000`. Do not bind an unencrypted bearer-token
 service to a public network.

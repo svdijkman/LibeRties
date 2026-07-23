@@ -7,6 +7,10 @@
 ls_security_policy(
   production = FALSE,
   requests_per_minute = if (production) 120L else 10000L,
+  max_rate_limit_keys = 10000L,
+  trusted_proxies = character(),
+  max_log_lines = 5000L,
+  max_log_bytes = 1024^2,
   require_storage_encryption = production,
   require_os_isolation = production
 )
@@ -16,10 +20,20 @@ ls_security_policy(
 
 \item{requests_per_minute}{Per-credential HTTP request ceiling.}
 
+\item{max_rate_limit_keys}{Maximum live credential/address buckets retained
+by one API process. Additional new identities share a bounded overflow
+bucket until the next minute.}
+
+\item{trusted_proxies}{Exact proxy addresses or IPv4 CIDR ranges whose
+`X-Forwarded-For` header may be trusted. The default trusts none.}
+
+\item{max_log_lines, max_log_bytes}{Response ceilings for remote worker logs.}
+
 \item{require_storage_encryption}{Require `LIBERTIES_STORAGE_KEY`.}
 
-\item{require_os_isolation}{Require `LIBERTIES_OS_ISOLATION` to identify the
-external container, service-account, cgroup, or Windows Job Object layer.}
+\item{require_os_isolation}{Require independently probed container/cgroup or
+deployment-provided OS isolation evidence. A descriptive environment
+variable alone is not accepted as proof.}
 }
 \value{
 A validated `liberties_security_policy`.

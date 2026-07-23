@@ -12,7 +12,8 @@ ls_run_api(
   quiet = FALSE,
   production = !.ls_loopback(host),
   behind_tls_proxy = FALSE,
-  policy = ls_security_policy(production = production)
+  policy = ls_security_policy(production = production),
+  isolation_probe = NULL
 )
 }
 \arguments{
@@ -33,6 +34,9 @@ non-loopback host.}
 reverse proxy.}
 
 \item{policy}{Optional security policy.}
+
+\item{isolation_probe}{Deployment-integrated isolation verifier passed to
+[ls_server_preflight()].}
 }
 \description{
 Bind to loopback by default and place a TLS reverse proxy in front of this

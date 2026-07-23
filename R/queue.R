@@ -95,6 +95,7 @@ LibeRQueue <- R6::R6Class(
       private$enforce_limits()
       private$reap()
       private$recover_untracked()
+      private$seal_terminal_logs()
       if (isTRUE(start)) private$start_available()
       invisible(self$list())
     },
@@ -159,9 +160,16 @@ LibeRQueue <- R6::R6Class(
     #' @return A character vector containing log lines.
     logs = function(id, user = self$user, stream = c("stdout", "stderr")) {
       stream <- match.arg(stream)
-      path <- file.path(.ls_job_dir(self$root, user, id), paste0(stream, ".log"))
-      if (!file.exists(path)) return(character())
-      readLines(path, warn = FALSE, encoding = "UTF-8")
+      job_dir <- .ls_job_dir(self$root, user, id)
+      metadata <- .ls_read_meta(job_dir)
+      if (.ls_terminal(metadata$status)) {
+        pid <- suppressWarnings(as.integer(metadata$pid %||% NA_integer_))
+        alive <- !is.na(pid) && pid > 0L && isTRUE(tryCatch(
+          ps::ps_pid_exists(pid), error = function(error) FALSE
+        ))
+        if (!alive) .ls_seal_job_logs(job_dir)
+      }
+      .ls_read_job_log(job_dir, stream)
     },
 
     #' @description
@@ -227,6 +235,21 @@ LibeRQueue <- R6::R6Class(
     }
   ),
   private = list(
+    seal_terminal_logs = function() {
+      jobs <- self$list()
+      jobs <- jobs[.ls_terminal(jobs$status), , drop = FALSE]
+      if (!nrow(jobs) || is.null(.ls_storage_key())) return(invisible(NULL))
+      for (index in seq_len(nrow(jobs))) {
+        job_dir <- .ls_job_dir(self$root, jobs$user[[index]], jobs$id[[index]])
+        metadata <- .ls_read_meta(job_dir)
+        pid <- suppressWarnings(as.integer(metadata$pid %||% NA_integer_))
+        alive <- !is.na(pid) && pid > 0L && isTRUE(tryCatch(
+          ps::ps_pid_exists(pid), error = function(error) FALSE
+        ))
+        if (!alive) .ls_seal_job_logs(job_dir)
+      }
+      invisible(NULL)
+    },
     enforce_limits = function() {
       keys <- ls(self$processes, all.names = TRUE)
       for (key in keys) {

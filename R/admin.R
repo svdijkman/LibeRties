@@ -85,6 +85,7 @@ ls_admin_gui <- function(root = .ls_default_root(),
     paste0("data:image/svg+xml,", utils::URLencode(favicon, reserved = TRUE))
   } else ""
   css <- .ls_admin_asset_data("admin.css")
+  package_version <- as.character(utils::packageVersion("LibeRties"))
 
   login_ui <- shiny::div(
     class = "la-login-shell",
@@ -92,6 +93,7 @@ ls_admin_gui <- function(root = .ls_default_root(),
       class = "la-login-card",
       shiny::div(class = "la-mark", shiny::HTML(favicon)),
       shiny::h1("LibeRties administration"),
+      shiny::span(class = "la-login-version", paste0("Version ", package_version)),
       shiny::p("Manage isolated users, resource limits and execution jobs."),
       shiny::div(class = "la-notice-host", shiny::uiOutput("notice")),
       shiny::passwordInput("admin_token", "Administrator token"),
@@ -105,7 +107,9 @@ ls_admin_gui <- function(root = .ls_default_root(),
       class = "la-header",
       shiny::div(class = "la-brand", shiny::HTML(favicon),
                  shiny::div(shiny::strong("LibeRties"), shiny::span("Server administration"))),
-      shiny::div(class = "la-header-meta", shiny::span(normalizePath(root, winslash = "/")),
+      shiny::div(class = "la-header-meta",
+                 shiny::span(class = "la-version-pill", paste0("v", package_version)),
+                 shiny::span(normalizePath(root, winslash = "/")),
                  shiny::tags$label(
                    class = "la-theme-toggle", title = "Toggle light and dark theme",
                    shiny::span(class = "la-theme-label", "Light"),
@@ -206,7 +210,7 @@ ls_admin_gui <- function(root = .ls_default_root(),
       shiny::tags$meta(name = "viewport", content = "width=device-width, initial-scale=1"),
       if (nzchar(favicon_href)) shiny::tags$link(rel = "icon", type = "image/svg+xml", href = favicon_href),
       shiny::tags$script(shiny::HTML(
-        "(function(){\n  var dark=false;\n  function apply(){\n    document.body.classList.toggle('la-theme-dark',dark);\n    document.querySelectorAll('.la-theme-checkbox').forEach(function(node){node.checked=dark;});\n    var label=dark?'Dark':'Light';\n    document.querySelectorAll('.la-theme-label').forEach(function(node){if(node.textContent!==label)node.textContent=label;});\n  }\n  window.liberAdminSetTheme=function(value){dark=!!value;try{localStorage.setItem('libertiesDarkTheme',dark?'1':'0');}catch(e){}apply();};\n  function restore(){try{dark=localStorage.getItem('libertiesDarkTheme')==='1';}catch(e){dark=false;}apply();}\n  document.addEventListener('DOMContentLoaded',restore);\n  new MutationObserver(apply).observe(document.documentElement,{childList:true,subtree:true});\n})();"
+        "(function(){\n  var dark=false;\n  function apply(){\n    document.documentElement.setAttribute('data-liber-theme',dark?'dark':'light');\n    document.body.classList.toggle('la-theme-dark',dark);\n    document.querySelectorAll('.la-theme-checkbox').forEach(function(node){node.checked=dark;});\n    var label=dark?'Dark':'Light';\n    document.querySelectorAll('.la-theme-label').forEach(function(node){if(node.textContent!==label)node.textContent=label;});\n  }\n  window.liberAdminSetTheme=function(value){dark=!!value;try{localStorage.setItem('liber.theme',dark?'dark':'light');localStorage.setItem('libertiesDarkTheme',dark?'1':'0');}catch(e){}apply();};\n  function restore(){try{var shared=localStorage.getItem('liber.theme');var legacy=localStorage.getItem('libertiesDarkTheme');dark=shared==='dark'||(shared!=='light'&&legacy==='1');if(shared!=='dark'&&shared!=='light'&&legacy!=='1'&&legacy!=='0')dark=matchMedia('(prefers-color-scheme: dark)').matches;}catch(e){dark=matchMedia('(prefers-color-scheme: dark)').matches;}apply();}\n  document.addEventListener('DOMContentLoaded',restore);\n  new MutationObserver(apply).observe(document.documentElement,{childList:true,subtree:true});\n})();"
       )),
       shiny::tags$style(shiny::HTML(css))
     ),
@@ -379,12 +383,12 @@ ls_admin_gui <- function(root = .ls_default_root(),
       count <- function(status) sum(queue$status == status)
       data.frame(
         Setting = c(
-          "Storage root", "Platform", "R version", "Users", "Running jobs",
+          "LibeRties version", "Storage root", "Platform", "R version", "Users", "Running jobs",
           "Failed jobs", "Cancelled jobs", "Completed jobs", "Queued jobs",
           "Storage used (MB)"
         ),
         Value = c(
-          normalizePath(root, winslash = "/"), R.version$platform, R.version.string,
+          package_version, normalizePath(root, winslash = "/"), R.version$platform, R.version.string,
           nrow(frame), count("running"), count("failed"), count("cancelled"),
           count("completed"), count("queued"),
           sprintf("%.2f", .ls_storage_bytes(root, "") / 1024^2)
